@@ -19,8 +19,7 @@ vendor/
 *.msi
 *.wixpdb
 
-# GitHub Actions
-.github/workflows/*.yml
+
 
 # Другие файлы временного назначения
 *.tmp
