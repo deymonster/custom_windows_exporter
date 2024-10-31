@@ -9,10 +9,7 @@ service.log
 *.exe
 *.dll
 
-# Кэш и зависимости
-vendor/
-*.mod
-*.sum
+
 
 # Сборочные артефакты
 *.wixobj
