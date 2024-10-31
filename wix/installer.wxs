@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="9c9619d4-f670-49a6-b6bb-7e7624b6de62" 
+             Name="NITRINOnet Control Manager" 
+             Language="1049" 
+             Version="1.0.0" 
+             Manufacturer="НЬЮ АЙ ТИ" 
+             UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900"
+             Codepage="65001">
+        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="NITRINOnet Control Manager">
+                    <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
+                        <File Source="D:\Node-exporter\node_exporter_custom.exe" KeyPath="yes" />
+
+                        <!-- Установка службы -->
+                        <ServiceInstall
+                            Id="NITRINOnetControlManagerService"
+                            Type="ownProcess"
+                            Name="NITRINOnet Control Manager"
+                            DisplayName="NITRINOnet Control Manager"
+                            Description="Система централизованного мониторинга NITRINOnet Control Manager"
+                            Account="NT AUTHORITY\LocalService"
+                            ErrorControl="normal"
+                            Start="auto"
+                            Vital="yes"
+                        />
+
+                        <!-- Настройка службы для автоматического запуска -->
+                        <ServiceControl Id="NITRINOnetControlManagerService"
+                            Name="NITRINOnet Control Manager"
+                            Start="install"
+                            Stop="both"
+                            Remove="uninstall"
+                            Wait="yes" />
+                    </Component>
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <Feature Id="ProductFeature" Title="NITRINOnet Control Manager" Level="1">
+            <ComponentRef Id="MainExecutable" />
+        </Feature>
+    </Product>
+</Wix>

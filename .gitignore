@@ -1,0 +1,27 @@
+# Бинарные файлы Go
+node_exporter_custom
+
+# Логи и временные файлы
+*.log
+service.log
+
+# Файлы, созданные для Windows
+*.exe
+*.dll
+
+# Кэш и зависимости
+vendor/
+*.mod
+*.sum
+
+# Сборочные артефакты
+*.wixobj
+*.msi
+*.wixpdb
+
+# GitHub Actions
+.github/workflows/*.yml
+
+# Другие файлы временного назначения
+*.tmp
+*.temp
