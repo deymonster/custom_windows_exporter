@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-    <Product Id="*" Name="NITRINOnet Control Manager" Language="1049" Version="1.0.0" Manufacturer="deymonster" UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900">
+    <Product 
+        Id="*" 
+        Name="NITRINOnet Control Manager" 
+        Language="1049" 
+        Version="1.0.0" 
+        Manufacturer="deymonster" 
+        UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900"
+        Codepage="65001"
+        >
         <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
