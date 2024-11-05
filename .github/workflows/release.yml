@@ -76,9 +76,10 @@ jobs:
         id: get_version
         shell: pwsh
         run: |
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $env:GITHUB_EVENT_INPUTS_version -ne '') {
-            Write-Output "Using manually provided version: $env:GITHUB_EVENT_INPUTS_version"
-            echo "VERSION=$env:GITHUB_EVENT_INPUTS_version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $eventData = Get-Content $env:GITHUB_EVENT_PATH | ConvertFrom-Json
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $eventData.inputs.version -ne '') {
+            Write-Output "Using manually provided version: $($eventData.inputs.version)"
+            echo "VERSION=$($eventData.inputs.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           } else {
             Write-Output "Using version from tag: $env:GITHUB_REF_NAME"
             echo "VERSION=$env:GITHUB_REF_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
