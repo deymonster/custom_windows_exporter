@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-${{ steps.get_tag.outputs.version }}-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 
 </div>
 

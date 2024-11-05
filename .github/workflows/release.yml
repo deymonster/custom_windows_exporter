@@ -22,14 +22,8 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
-      - name: Get current tag
-        id: get_tag
-        run: echo "::set-output name=version::$(echo ${GITHUB_REF#refs/tags/})"
-
       - name: Build
         run: go build -o NITRINOnetControlManager.exe main.go
-        env:
-          VERSION: ${{ steps.get_tag.outputs.version }}
 
       - name: Create service installer
         shell: cmd
@@ -51,6 +45,15 @@ jobs:
       - name: Create release artifact
         run: |
           7z a release.zip NITRINOnetControlManager.exe install-service.bat uninstall-service.bat service.log
+
+      - name: Update README with version
+        run: |
+          VERSION=$(echo "${{ github.ref }}" | sed 's|refs/tags/||')
+          sed -i "s/version-[0-9]\+\.[0-9]\+\.[0-9]\+/version-${VERSION}/" README.md
+          git config --local user.email "deymonster@gmail.com"
+          git config --local user.name "deymonster"
+          git commit -am "Update README with version ${VERSION}"
+          git push
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
