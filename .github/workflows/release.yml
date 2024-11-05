@@ -46,6 +46,10 @@ jobs:
         run: |
           7z a release.zip NITRINOnetControlManager.exe install-service.bat uninstall-service.bat service.log
 
+      - name: Create and checkout release branch
+        run: |
+          git checkout -b release
+
       - name: Update README with version
         shell: pwsh
         run: |
@@ -54,7 +58,10 @@ jobs:
           git config --local user.email "deymonster@gmail.com"
           git config --local user.name "deymonster"
           git commit -am "Update README with version $VERSION"
-          git push
+
+      - name: Push release branch
+        run: |
+          git push --set-upstream origin release
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
