@@ -19,6 +19,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Check environment variables
+        run: |
+          echo "List of environment variables:"
+          env | sort
+
+      - name: Check GITHUB_REF specifically
+        shell: pwsh
+        run: |
+          Write-Output "GITHUB_REF: $GITHUB_REF"
+          Write-Output "GITHUB_REF_NAME: $GITHUB_REF_NAME"
+          Write-Output "GITHUB_REF_TYPE: $GITHUB_REF_TYPE"
+
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
