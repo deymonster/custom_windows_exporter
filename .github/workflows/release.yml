@@ -61,7 +61,7 @@ jobs:
 
       - name: Push release branch
         run: |
-          git remote set-url origin https://deymonster:${{ secrets.GO_TOKEN }}@github.com/deymonster/custom_windows_exporter.git
+          git remote set-url origin git@github.com:deymonster/custom_windows_exporter.git
           git push --set-upstream origin release
 
       - name: Create GitHub release
