@@ -55,10 +55,10 @@ jobs:
         run: |
           git checkout -b release
 
-      - name: Check GITHUB_REF
+      - name: Dump environment variables
         shell: pwsh
         run: |
-          Write-Output "GITHUB_REF: $GITHUB_REF"
+          printenv
 
       - name: Update README with version
         shell: pwsh
