@@ -2,6 +2,11 @@ name: Build and release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version for manual release"
+        required: true
+        default: "v1.0.0"
   push:
     tags:
       - "v*"
@@ -55,15 +60,14 @@ jobs:
         run: |
           git checkout -b release
 
-      - name: Dump environment variables
+      - name: Set version from tag or input
         shell: pwsh
         run: |
-          printenv
-
-      - name: Update README with version
-        shell: pwsh
-        run: |
-          $VERSION = "${GITHUB_REF#refs/tags/}"
+          if ($env:GITHUB_REF -match 'refs/tags/v(.+)') {
+            $VERSION = $matches[1]
+          } else {
+            $VERSION = "${{ github.event.inputs.version }}"
+          }
           Write-Output "Current version: $VERSION"
           (Get-Content README.md) -replace 'version-[0-9]+\.[0-9]+\.[0-9]+', "version-$VERSION" | Set-Content README.md
           git config --local user.email "deymonster@gmail.com"
