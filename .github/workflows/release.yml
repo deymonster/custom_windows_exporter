@@ -65,8 +65,9 @@ jobs:
           git commit -am "Update README with version $VERSION"
 
       - name: Disable strict host key checking
+        shell: pwsh
         run: |
-          echo -e "Host github.com\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
+          Add-Content -Path "$HOME/.ssh/config" -Value "Host github.com`n`tStrictHostKeyChecking no"
 
       - name: Push release branch
         run: |
