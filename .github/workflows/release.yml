@@ -34,10 +34,10 @@ jobs:
         with:
           name: node-exporter
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: node-exporter.exe
+        # - name: Create GitHub release
+        #   uses: softprops/action-gh-release@v2
+        #   with:
+        #     files: node-exporter.exe
 
         env:
           GITHUB_TOKEN: ${{ secrets.GO_TOKEN }}
