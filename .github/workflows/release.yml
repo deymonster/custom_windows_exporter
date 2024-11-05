@@ -64,6 +64,10 @@ jobs:
           git config --local user.name "deymonster"
           git commit -am "Update README with version $VERSION"
 
+      - name: Disable strict host key checking
+        run: |
+          echo -e "Host github.com\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
+
       - name: Push release branch
         run: |
           git remote set-url origin git@github.com:deymonster/custom_windows_exporter.git
