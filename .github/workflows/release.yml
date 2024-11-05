@@ -55,6 +55,11 @@ jobs:
         run: |
           git checkout -b release
 
+      - name: Check GITHUB_REF
+        shell: pwsh
+        run: |
+          Write-Output "GITHUB_REF: $GITHUB_REF"
+
       - name: Update README with version
         shell: pwsh
         run: |
