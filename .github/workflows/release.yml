@@ -53,7 +53,7 @@ jobs:
           files: release.zip
 
         env:
-          GITHUB_TOKEN: ${{ secrets.GO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
       - name: CleanUp Artifacts
         if: always()
