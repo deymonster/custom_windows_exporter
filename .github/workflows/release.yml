@@ -72,14 +72,22 @@ jobs:
         run: |
           git checkout -b release
 
-      - name: Set version from tag or input
+      - name: Determine version
+        id: get_version
+        run: |
+          if (${{ github.event_name }} == 'workflow_dispatch' && ${{ github.event.inputs.version }} != '') {
+            echo "Using manually provided version: ${{ github.event.inputs.version }}"
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          } else {
+            echo "Using version from tag: ${GITHUB_REF_NAME}"
+            echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          }
+        shell: pwsh
+
+      - name: Update README with version
         shell: pwsh
         run: |
-          if ($env:GITHUB_REF -match 'refs/tags/v(.+)') {
-            $VERSION = $matches[1]
-          } else {
-            $VERSION = "${{ github.event.inputs.version }}"
-          }
+          $VERSION = "${{ env.VERSION }}"
           Write-Output "Current version: $VERSION"
           (Get-Content README.md) -replace 'version-[0-9]+\.[0-9]+\.[0-9]+', "version-$VERSION" | Set-Content README.md
           git config --local user.email "deymonster@gmail.com"
