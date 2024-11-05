@@ -13,8 +13,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
         with:
-          go-version: "1.20"
+          go-version: "1.2"
 
       - name: Build
         run: go build -o NITRINOnetControlManager.exe main.go
@@ -31,6 +34,10 @@ jobs:
         run: |
           echo @echo off > uninstall-service.bat
           echo sc delete NITRINOnetControlManager >> uninstall-service.bat
+
+      - name: Create log file
+        shell: cmd
+        run: type nul > service.log
 
       - name: Create release artifact
         run: |
