@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-${{ steps.get_tag.outputs.version }}-blue.svg)
 
 </div>
 
@@ -65,3 +65,13 @@ Node Exporter Custom — это мониторинговый агент для �
   - Версия
 
 ## 🚀 Установка
+
+### Установка службы
+
+1. Скачайте релиз NITRINOnetControlManager.exe и два файла install-service.bat и uninstall-service.bat из [раздела Releases](https://github.com/yourusername/yourrepository/releases).
+2. Поместите эти файлы в одну папку на вашем компьютере.
+3. Запустите install-service.bat от имени администратора, чтобы установить службу.
+
+### Удаление службы
+
+1. Запустите uninstall-service.bat от имени администратора, чтобы удалить службу.

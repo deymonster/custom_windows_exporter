@@ -22,8 +22,14 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
+      - name: Get current tag
+        id: get_tag
+        run: echo "::set-output name=version::$(echo ${GITHUB_REF#refs/tags/})"
+
       - name: Build
         run: go build -o NITRINOnetControlManager.exe main.go
+        env:
+          VERSION: ${{ steps.get_tag.outputs.version }}
 
       - name: Create service installer
         shell: cmd
