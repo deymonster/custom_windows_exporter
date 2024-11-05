@@ -47,12 +47,13 @@ jobs:
           7z a release.zip NITRINOnetControlManager.exe install-service.bat uninstall-service.bat service.log
 
       - name: Update README with version
+        shell: pwsh
         run: |
-          VERSION=$(echo "${{ github.ref }}" | sed 's|refs/tags/||')
-          sed -i "s/version-[0-9]\+\.[0-9]\+\.[0-9]\+/version-${VERSION}/" README.md
+          $VERSION = "${GITHUB_REF#refs/tags/}"
+          (Get-Content README.md) -replace 'version-[0-9]+\.[0-9]+\.[0-9]+', "version-$VERSION" | Set-Content README.md
           git config --local user.email "deymonster@gmail.com"
           git config --local user.name "deymonster"
-          git commit -am "Update README with version ${VERSION}"
+          git commit -am "Update README with version $VERSION"
           git push
 
       - name: Create GitHub release
