@@ -16,6 +16,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"node_exporter_custom/metrics"
+
+	"golang.org/x/sys/windows/svc/mgr"
 )
 
 // Setup logging to a file
@@ -120,13 +122,79 @@ func runService(name string, isDebug bool) {
 	}
 }
 
+func installService() error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return err
+	}
+	defer m.Disconnect()
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	config := mgr.Config{
+		DisplayName: "NITRINOnet Control Manager",
+		StartType:   mgr.StartAutomatic,
+		Description: "Система централизованного мониторинга NITRINOnet Control Manager",
+	}
+
+	s, err := m.CreateService("NITRINOnetControlManager", exePath, config)
+	if err != nil {
+		return err
+	}
+
+	defer s.Close()
+
+	return nil
+
+}
+
+func removeService() error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return err
+	}
+	defer m.Disconnect()
+	s, err := m.OpenService("NITRINOnetControlManager")
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	err = s.Delete()
+	if err != nil {
+		return err
+	}
+	return nil
+
+}
+
 func main() {
+
 	logFile, err := setupLogging()
 	if err != nil {
 		log.Fatalf("Failed to setup logging: %v", err)
 	}
 
 	defer logFile.Close()
+
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "install":
+			err := installService()
+			if err != nil {
+				log.Fatalf("Failed to install service: %v", err)
+			}
+			return
+		case "uninstall":
+			err := removeService()
+			if err != nil {
+				log.Fatalf("Failed to remove service: %v", err)
+			}
+			return
+		}
+	}
 
 	isInteractive, err := svc.IsWindowsService()
 	if err != nil {

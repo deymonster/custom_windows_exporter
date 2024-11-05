@@ -17,27 +17,45 @@ jobs:
           go-version: "1.20"
 
       - name: Build
-        run: go build -o node-exporter.exe main.go
+        run: go build -o NITRINOnetControlManager.exe main.go
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v3
+      - name: Create service installer
+        shell: cmd
+        run: |
+          echo @echo off > install-service.bat
+          echo sc create NITRINOnetControlManager binpath="%~dp0\NITRINOnetControlManager.exe" DISPLAYNAME="NITRINOnet Control Manager" start=auto >> install-service.bat
+          echo sc start NITRINOnetControlManager >> install-service.bat
+
+      - name: Create service uninstaller
+        shell: cmd
+        run: |
+          echo @echo off > uninstall-service.bat
+          echo sc delete NITRINOnetControlManager >> uninstall-service.bat
+
+      - name: Create release artifact
+        run: |
+          7z a release.zip NITRINOnetControlManager.exe install-service.bat uninstall-service.bat service.log
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          name: node-exporter
-          path: node-exporter.exe
-
-  release:
-    needs: build
-    runs-on: windows-latest
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: node-exporter
-
-        # - name: Create GitHub release
-        #   uses: softprops/action-gh-release@v2
-        #   with:
-        #     files: node-exporter.exe
+          files: release.zip
 
         env:
           GITHUB_TOKEN: ${{ secrets.GO_TOKEN }}
+
+      - name: CleanUp Artifacts
+        if: always()
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          failOnError: false
+          name: |
+            release.zip
+            NITRINOnetControlManager
+
+      - name: Purge old artifacts
+        uses: kolpav/purge-artifacts@v1
+        with:
+          token: ${{ secrets.GO_TOKEN }}
+          expire-in: 2d
