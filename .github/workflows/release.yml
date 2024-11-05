@@ -47,15 +47,20 @@ jobs:
 
       - name: CleanUp Artifacts
         if: always()
-        uses: geekyeggo/delete-artifact@v2
+        uses: actions/github-script@v6
         with:
-          failOnError: false
-          name: |
-            release.zip
-            NITRINOnetControlManager
-
-      - name: Purge old artifacts
-        uses: kolpav/purge-artifacts@v1
-        with:
-          token: ${{ secrets.GO_TOKEN }}
-          expire-in: 2d
+          script: |
+            const response = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            for (const artifact of response.data.artifacts) {
+              if (artifact.name === 'release.zip' || artifact.name === 'NITRINOnetControlManager') {
+                console.log('Deleting artifact:', artifact.name);
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id
+                });
+              }
+            }
