@@ -59,6 +59,7 @@ jobs:
         shell: pwsh
         run: |
           $VERSION = "${GITHUB_REF#refs/tags/}"
+          Write-Output "Current version: $VERSION"
           (Get-Content README.md) -replace 'version-[0-9]+\.[0-9]+\.[0-9]+', "version-$VERSION" | Set-Content README.md
           git config --local user.email "deymonster@gmail.com"
           git config --local user.name "deymonster"
