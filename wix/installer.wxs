@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-    <Product Id="9c9619d4-f670-49a6-b6bb-7e7624b6de62" 
-             Name="NITRINOnet Control Manager" 
-             Language="1049" 
-             Version="1.0.0" 
-             Manufacturer="НЬЮ АЙ ТИ" 
-             UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900"
-             Codepage="65001">
-        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+    <Product Id="*" Name="NITRINOnet Control Manager" Language="1049" Version="1.0.0" Manufacturer="deymonster" UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900">
+        <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
@@ -16,24 +10,23 @@
             <Directory Id="ProgramFilesFolder">
                 <Directory Id="INSTALLFOLDER" Name="NITRINOnet Control Manager">
                     <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
-                        <File Source="D:\Node-exporter\node_exporter_custom.exe" KeyPath="yes" />
-
-                        <!-- Установка службы -->
+                        <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
+                        
+                        <!-- Service installation -->
                         <ServiceInstall
                             Id="NITRINOnetControlManagerService"
                             Type="ownProcess"
-                            Name="NITRINOnet Control Manager"
+                            Name="NITRINOnetControlManager"
                             DisplayName="NITRINOnet Control Manager"
-                            Description="Система централизованного мониторинга NITRINOnet Control Manager"
-                            Account="NT AUTHORITY\LocalService"
-                            ErrorControl="normal"
+                            Description="Служба для мониторинга и сбора данных"
                             Start="auto"
-                            Vital="yes"
+                            Account="LocalSystem"
+                            ErrorControl="normal"
                         />
 
-                        <!-- Настройка службы для автоматического запуска -->
-                        <ServiceControl Id="NITRINOnetControlManagerService"
-                            Name="NITRINOnet Control Manager"
+                        <!-- Service control -->
+                        <ServiceControl Id="ControlService"
+                            Name="NITRINOnetControlManager"
                             Start="install"
                             Stop="both"
                             Remove="uninstall"
