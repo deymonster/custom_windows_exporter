@@ -1,6 +1,6 @@
 module node_exporter_custom
 
-go 1.23.2
+go 1.23
 
 require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
