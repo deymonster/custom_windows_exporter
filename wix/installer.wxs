@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     
-     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
+<Wix 
+    xmlns="http://wixtoolset.org/schemas/v4/wxs"
+    xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
+    >
 
-  <Fragment>
-    <Product
+   
+    <Package
         Id="*"
         Name="NITRINOnet Control Manager"
         Language="1049"
@@ -26,9 +27,9 @@
         <ComponentGroupRef Id="ProductComponents" />
       </Feature>
     </Product>
-  </Fragment>
+  
 
-  <Fragment>
+  
     <ComponentGroup Id="ProductComponents">
       <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8" Directory="INSTALLFOLDER">
         <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
@@ -62,5 +63,5 @@
             Description="Allow inbound access to port 9183" />
       </Component>
     </ComponentGroup>
-  </Fragment>
+  
 </Wix>

@@ -43,7 +43,8 @@ jobs:
       - name: Install Wix Toolset and add Firewall Extension
         run: |
           dotnet tool install --global wix --version 4.0.6
-          wix extension add -g WixToolset.Firewall.wixext
+          dotnet add package WixToolset.Util.wixext --version 4.0.6
+          wix extension add -g WixToolset.Firewall.wixext --version 4.0.6
           wix extension list -g
 
       - name: Build
@@ -51,7 +52,7 @@ jobs:
 
       - name: Build MSI Installer
         run: |
-          wix build wix/installer.wxs -o NITRINOnetControlManager.msi
+          wix build wix/installer_new.wxs -o NITRINOnetControlManager.msi
 
       - name: Create service scripts
         shell: cmd
