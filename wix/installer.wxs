@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-    xmlns:fire="http://schemas.microsoft.com/wix/FirewallExtension"
->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
+    
     <Product 
         Id="*" 
         Name="NITRINOnet Control Manager" 
@@ -9,14 +9,10 @@
         Version="1.0.0" 
         Manufacturer="deymonster" 
         UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900"
-        Codepage="65001"
-        >
+        Codepage="65001">
+        
         <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
-
-        <MajorUpgrade 
-            DowngradeErrorMessage="A newer version of [ProductName] is already installed."
-           
-             />
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
 
         <Directory Id="TARGETDIR" Name="SourceDir">
@@ -25,21 +21,10 @@
                     <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
                         <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
                         
-                        <!-- Stop and remove the service if it's already present on installation -->
-                        <ServiceControl Id="RemoveExistingService"
-                            Name="NITRINOnetControlManager"
-                            Stop="both"
-                            Remove="install"
-                            Wait="yes" />
+                        <ServiceControl Id="RemoveExistingService" Name="NITRINOnetControlManager" Stop="both" Remove="install" Wait="yes" />
+                        <ServiceControl Id="ControlService" Name="NITRINOnetControlManager" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
 
-                        <!-- Control service: Start on install, stop on uninstall -->
-                        <ServiceControl Id="ControlService"
-                            Name="NITRINOnetControlManager"
-                            Start="install"
-                            Stop="both"
-                            Remove="uninstall"
-                            Wait="yes" />
-
+                        <!-- Firewall Exception -->
                         <fire:FirewallException
                             Id="FirewallException9183"
                             Name="NITRINOnetControlManager Firewall Exception Port 9183"
@@ -48,20 +33,14 @@
                             Protocol="tcp"
                             Profile="any"
                             Program="[#NITRINOnetControlManagerExe]"
-                            Description="Allow inbound access to port 9183"
-                             />
-
-                       
+                            Description="Allow inbound access to port 9183" />
                     </Component>
-
-                   
                 </Directory>
             </Directory>
         </Directory>
 
         <Feature Id="ProductFeature" Title="NITRINOnet Control Manager" Level="1">
             <ComponentRef Id="MainExecutable" />
-           
         </Feature>
     </Product>
 </Wix>

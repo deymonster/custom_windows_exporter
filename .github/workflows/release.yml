@@ -37,9 +37,8 @@ jobs:
 
       - name: Build MSI Installer
         run: |
-
-          candle.exe -ext WixUIExtension  wix/installer.wxs -out installer.wixobj
-          light.exe -ext WixUIExtension  -out NITRINOnetControlManager.msi installer.wixobj
+          candle.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension wix/installer.wxs -out installer.wixobj
+          light.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension -out NITRINOnetControlManager.msi installer.wixobj
 
       - name: Create service scripts
         shell: cmd
