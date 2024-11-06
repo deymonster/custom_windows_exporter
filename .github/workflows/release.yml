@@ -28,13 +28,21 @@ jobs:
         run: go mod tidy
 
       - name: Install WiX Toolset
-        run: choco install wixtoolset --no-progress --yes
+        run: |
+
+          choco install wixtoolset --no-progress --yes
+          echo "Checking WIX Toolset version..."
+          choco list wixtoolset --local-only
+          echp "Verifying installed WIX Tools"
+          candle.exe -? || echo "candle.exe is not installed"
+          light.exe -? || echo "light.exe is not installed"
 
       - name: Build
         run: go build -o NITRINOnetControlManager.exe main.go
 
       - name: Build MSI Installer
         run: |
+
           candle.exe -ext WixUIExtension  -ext WixUtilExtension wix/installer.wxs -out installer.wixobj
           light.exe -ext WixUIExtension -ext WixUtilExtension -out NITRINOnetControlManager.msi installer.wixobj
 
