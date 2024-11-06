@@ -20,12 +20,16 @@ import (
 
 // Setup logging to a file
 func setupLogging() (*os.File, error) {
-	f, err := os.OpenFile("service.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logPath := "C:\\ProgramData\\NITRINOnetControlManager\\service.log"
+
+	os.MkdirAll("C:\\ProgramData\\NITRINOnetControlManager", os.ModePerm)
+
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
-	log.SetOutput(io.MultiWriter(os.Stdout, f))
 
+	log.SetOutput(io.MultiWriter(os.Stdout, f))
 	return f, nil
 }
 
