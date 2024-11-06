@@ -2,6 +2,8 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
     
+    <Fragment>
+    
     <Product 
         Id="*" 
         Name="NITRINOnet Control Manager" 
@@ -43,4 +45,6 @@
             <ComponentRef Id="MainExecutable" />
         </Feature>
     </Product>
+
+    </Fragment>
 </Wix>
