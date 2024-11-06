@@ -16,8 +16,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"node_exporter_custom/metrics"
-
-	"golang.org/x/sys/windows/svc/mgr"
 )
 
 // Setup logging to a file
@@ -27,7 +25,6 @@ func setupLogging() (*os.File, error) {
 		return nil, err
 	}
 	log.SetOutput(io.MultiWriter(os.Stdout, f))
-	log.SetOutput(f)
 
 	return f, nil
 }
@@ -72,103 +69,118 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 }
 
 func initMetrics() {
-
+	log.Println("Initializing metrics...")
 	prometheus.MustRegister(metrics.BiosInfo)
+	metrics.RecordBiosInfo()
 
 	prometheus.MustRegister(metrics.ProccessCount)
 	prometheus.MustRegister(metrics.ProccessMemoryUsage)
 	prometheus.MustRegister(metrics.ProccessCPUUsage)
+	metrics.RecordProccessInfo()
 
 	prometheus.MustRegister(metrics.CpuUsage)
 	prometheus.MustRegister(metrics.CpuTemperature)
+	metrics.RecordCPUInfo()
 
 	prometheus.MustRegister(metrics.MemoryModuleInfo)
 	prometheus.MustRegister(metrics.TotalMemory)
 	prometheus.MustRegister(metrics.UsedMemory)
 	prometheus.MustRegister(metrics.FreeMemory)
+	metrics.RecordMemoryModuleInfo()
+	metrics.RecordMemoryUsage()
 
 	prometheus.MustRegister(metrics.DiskUsage)
 	prometheus.MustRegister(metrics.DiskUsagePercent)
 	prometheus.MustRegister(metrics.DiskReadBytes)
 	prometheus.MustRegister(metrics.DiskWriteBytes)
 	prometheus.MustRegister(metrics.DiskHealthStatus)
+	metrics.RecordDiskUsage()
 
 	prometheus.MustRegister(metrics.NetworkStatus)
 	prometheus.MustRegister(metrics.NetworkRxBytesPerSecond)
 	prometheus.MustRegister(metrics.NetworkTxBytesPerSecond)
 	prometheus.MustRegister(metrics.NetworkErrors)
 	prometheus.MustRegister(metrics.NetworkDroppedPackets)
+	metrics.RecordNetworkMetrics()
 
 	prometheus.MustRegister(metrics.GpuInfo)
 	prometheus.MustRegister(metrics.GpuMemory)
+	metrics.RecordGpuInfo()
 
 	prometheus.MustRegister(metrics.MotherboardInfo)
+	metrics.RecordMotherboardInfo()
 
 	prometheus.MustRegister(metrics.SystemInfo)
 	prometheus.MustRegister(metrics.SystemUptime)
+	metrics.RecordSystemMetrics()
+	log.Println("Metrics initialized")
 }
 
-func runService(name string, isDebug bool) {
-	if isDebug {
+func runService(name string, isService bool) {
+	if !isService {
+		// Интерактивный режим
+		log.Println("Running in interactive mode.")
 		err := debug.Run(name, &myService{})
 		if err != nil {
-			log.Fatalln("Error running service in debug mode.")
+			log.Fatalln("Error running service in debug mode.", err)
 		}
 	} else {
+		// Службный режим
+		log.Println("Running in service  mode.")
 		err := svc.Run(name, &myService{})
 		if err != nil {
-			log.Fatalln("Error running service in Service Control mode.")
+			log.Fatalln("Error running service in Service Control mode.", err)
 		}
 	}
 }
 
-func installService() error {
-	m, err := mgr.Connect()
-	if err != nil {
-		return err
-	}
-	defer m.Disconnect()
+// func installService() error {
+// 	m, err := mgr.Connect()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer m.Disconnect()
 
-	exePath, err := os.Executable()
-	if err != nil {
-		return err
-	}
+// 	exePath, err := os.Executable()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	config := mgr.Config{
-		DisplayName: "NITRINOnet Control Manager",
-		StartType:   mgr.StartAutomatic,
-		Description: "Система централизованного мониторинга NITRINOnet Control Manager",
-	}
+// 	config := mgr.Config{
+// 		DisplayName: "NITRINOnet Control Manager",
+// 		StartType:   mgr.StartAutomatic,
+// 		Description: "Система централизованного мониторинга NITRINOnet Control Manager",
+// 	}
 
-	s, err := m.CreateService("NITRINOnetControlManager", exePath, config)
-	if err != nil {
-		return err
-	}
+// 	s, err := m.CreateService("NITRINOnetControlManager", exePath, config)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	defer s.Close()
+// 	defer s.Close()
 
-	return nil
+// 	return nil
 
-}
+// }
 
-func removeService() error {
-	m, err := mgr.Connect()
-	if err != nil {
-		return err
-	}
-	defer m.Disconnect()
-	s, err := m.OpenService("NITRINOnetControlManager")
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-	err = s.Delete()
-	if err != nil {
-		return err
-	}
-	return nil
+// func removeService() error {
+// 	m, err := mgr.Connect()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer m.Disconnect()
+// 	s, err := m.OpenService("NITRINOnetControlManager")
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer s.Close()
+// 	err = s.Delete()
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
 
-}
+// }
 
 func main() {
 
@@ -179,38 +191,20 @@ func main() {
 
 	defer logFile.Close()
 
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "install":
-			err := installService()
-			if err != nil {
-				log.Fatalf("Failed to install service: %v", err)
-			}
-			return
-		case "uninstall":
-			err := removeService()
-			if err != nil {
-				log.Fatalf("Failed to remove service: %v", err)
-			}
-			return
-		}
-	}
-
-	isInteractive, err := svc.IsWindowsService()
+	isService, err := svc.IsWindowsService()
 	if err != nil {
 		log.Fatalf("Failed to check interactive session: %v", err)
 	}
 
-	log.Printf("Is running as service: %v", !isInteractive)
+	log.Printf("Is isInteractive: %v", isService)
 
-	if isInteractive {
+	if !isService {
 		log.Println("Running in interactive mode.")
-
 		fmt.Printf("Starting service in interactive mode...\n")
 		runService("NITRINOnetControlManager", false)
 
 	} else {
-
+		log.Println("Running as service.")
 		runService("NITRINOnetControlManager", true)
 
 	}
