@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:fire="http://schemas.microsoft.com/wix/FirewallExtension">
+     xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
     
     <Product 
         Id="*" 
