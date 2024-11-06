@@ -27,18 +27,28 @@ jobs:
       - name: Install dependencies
         run: go mod tidy
 
-      - name: Install WiX Toolset
-        run: |
+      # - name: Install WiX Toolset
+      #   run: |
 
-          choco install wixtoolset --no-progress --yes
+      #     choco install wixtoolset --no-progress --yes
+
+      # - name: Build MSI Installer
+      #   run: |
+      #     candle.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension wix/installer.wxs -out installer.wixobj
+      #     light.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension -out NITRINOnetControlManager.msi installer.wixobj
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Install Wix Toolset
+        run: dotnet tool install --global wixtoolset
 
       - name: Build
         run: go build -o NITRINOnetControlManager.exe main.go
 
       - name: Build MSI Installer
         run: |
-          candle.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension wix/installer.wxs -out installer.wixobj
-          light.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension -out NITRINOnetControlManager.msi installer.wixobj
+          wix build wix/installer.wxs -o NITRINOnetControlManager.msi
 
       - name: Create service scripts
         shell: cmd
