@@ -19,18 +19,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Check environment variables
-        run: |
-          echo "List of environment variables:"
-          env | sort
-
-      - name: Check GITHUB_REF specifically
-        shell: pwsh
-        run: |
-          Write-Output "GITHUB_REF: $GITHUB_REF"
-          Write-Output "GITHUB_REF_NAME: $GITHUB_REF_NAME"
-          Write-Output "GITHUB_REF_TYPE: $GITHUB_REF_TYPE"
-
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
@@ -50,16 +38,13 @@ jobs:
           candle.exe wix/installer.wxs -out installer.wixobj
           light.exe -ext WixUIExtension -out NITRINOnetControlManager.msi installer.wixobj
 
-      - name: Create service installer
+      - name: Create service scripts
         shell: cmd
         run: |
           echo @echo off > install-service.bat
           echo sc create NITRINOnetControlManager binpath="%~dp0\NITRINOnetControlManager.exe" DISPLAYNAME="NITRINOnet Control Manager" start=auto >> install-service.bat
           echo sc start NITRINOnetControlManager >> install-service.bat
 
-      - name: Create service uninstaller
-        shell: cmd
-        run: |
           echo @echo off > uninstall-service.bat
           echo sc delete NITRINOnetControlManager >> uninstall-service.bat
 
@@ -69,55 +54,27 @@ jobs:
 
       - name: Create release artifact
         run: |
-          7z a release.zip NITRINOnetControlManager.exe install-service.bat uninstall-service.bat service.log NITRINOnetControlManager.msi
+          7z a release.zip NITRINOnetControlManager.exe install-service.bat uninstall-service.bat service.log
 
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.5.3
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v3
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          name: release-package
+          path: release.zip
 
-      - name: Create and checkout release branch
-        run: |
-          git checkout -b release
-
-      - name: Determine version
-        id: get_version
-        shell: pwsh
-        run: |
-          $eventData = Get-Content $env:GITHUB_EVENT_PATH | ConvertFrom-Json
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and $eventData.inputs.version -ne '') {
-            Write-Output "Using manually provided version: $($eventData.inputs.version)"
-            echo "VERSION=$($eventData.inputs.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          } else {
-            Write-Output "Using version from tag: $env:GITHUB_REF_NAME"
-            echo "VERSION=$env:GITHUB_REF_NAME" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          }
-
-      - name: Update README with version
-        shell: pwsh
-        run: |
-          $VERSION = "${{ env.VERSION }}"
-          Write-Output "Current version: $VERSION"
-          (Get-Content README.md) -replace 'version-[0-9]+\.[0-9]+\.[0-9]+', "version-$VERSION" | Set-Content README.md
-          git config --local user.email "deymonster@gmail.com"
-          git config --local user.name "deymonster"
-          git commit -am "Update README with version $VERSION"
-
-      - name: Disable strict host key checking
-        shell: pwsh
-        run: |
-          Add-Content -Path "$HOME/.ssh/config" -Value "Host github.com`n`tStrictHostKeyChecking no"
-
-      - name: Push release branch
-        run: |
-          git remote set-url origin git@github.com:deymonster/custom_windows_exporter.git
-          git push --set-upstream origin release
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v3
+        with:
+          name: installer-msi
+          path: NITRINOnetControlManager.msi
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: release.zip
+          files: |
+            release.zip
+            NITRINOnetControlManager.msi
 
         env:
           GITHUB_TOKEN: ${{ secrets.GO_TOKEN }}
