@@ -48,7 +48,7 @@ jobs:
 
       - name: Build MSI Installer
         run: |
-          wix build wix/installer.wxs -o NITRINOnetControlManager.msi
+          wix build wix/installer.wxs -o NITRINOnetControlManager.msi -ext WixToolset.Firewall.dll
 
       - name: Create service scripts
         shell: cmd
