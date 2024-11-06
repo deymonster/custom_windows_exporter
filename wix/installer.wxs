@@ -1,50 +1,48 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
-    
-    <Fragment>
-    
-    <Product 
-        Id="*" 
-        Name="NITRINOnet Control Manager" 
-        Language="1049" 
-        Version="1.0.0" 
-        Manufacturer="deymonster" 
-        UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900"
-        Codepage="65001">
-        
-        <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
-        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
-        <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
+  <Product 
+      Id="*" 
+      Name="NITRINOnet Control Manager" 
+      Language="1049" 
+      Version="1.0.0" 
+      Manufacturer="deymonster" 
+      UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900">
+      
+      <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+      <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+      <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
 
-        <Directory Id="TARGETDIR" Name="SourceDir">
-            <Directory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="NITRINOnet Control Manager">
-                    <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
-                        <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
-                        
-                        <ServiceControl Id="RemoveExistingService" Name="NITRINOnetControlManager" Stop="both" Remove="install" Wait="yes" />
-                        <ServiceControl Id="ControlService" Name="NITRINOnetControlManager" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+      <Directory Id="TARGETDIR" Name="SourceDir">
+          <Directory Id="ProgramFilesFolder">
+              <Directory Id="INSTALLFOLDER" Name="NITRINOnet Control Manager"/>
+          </Directory>
+      </Directory>
 
-                        <!-- Firewall Exception -->
-                        <fire:FirewallException
-                            Id="FirewallException9183"
-                            Name="NITRINOnetControlManager Firewall Exception Port 9183"
-                            Scope="any"
-                            Port="9183"
-                            Protocol="tcp"
-                            Profile="any"
-                            Program="[#NITRINOnetControlManagerExe]"
-                            Description="Allow inbound access to port 9183" />
-                    </Component>
-                </Directory>
-            </Directory>
-        </Directory>
+      <Feature Id="ProductFeature" Title="NITRINOnet Control Manager" Level="1">
+          <ComponentGroupRef Id="ProductComponents" />
+      </Feature>
+  </Product>
 
-        <Feature Id="ProductFeature" Title="NITRINOnet Control Manager" Level="1">
-            <ComponentRef Id="MainExecutable" />
-        </Feature>
-    </Product>
+  <Fragment>
+      <ComponentGroup Id="ProductComponents">
+          <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8" Directory="INSTALLFOLDER">
+              <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
+              
+              <ServiceControl Id="RemoveExistingService" Name="NITRINOnetControlManager" Stop="both" Remove="install" Wait="yes" />
+              <ServiceControl Id="ControlService" Name="NITRINOnetControlManager" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
 
-    </Fragment>
+              <!-- Firewall Exception -->
+              <fire:FirewallException
+                  Id="FirewallException9183"
+                  Name="NITRINOnetControlManager Firewall Exception Port 9183"
+                  Scope="any"
+                  Port="9183"
+                  Protocol="tcp"
+                  Profile="any"
+                  Program="[#NITRINOnetControlManagerExe]"
+                  Description="Allow inbound access to port 9183" />
+          </Component>
+      </ComponentGroup>
+  </Fragment>
 </Wix>
