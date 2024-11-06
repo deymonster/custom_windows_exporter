@@ -40,15 +40,18 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.1
 
-      - name: Install Wix Toolset
-        run: dotnet tool install --global wix --version 4.0.6
+      - name: Install Wix Toolset and add Firewall Extension
+        run: |
+          dotnet tool install --global wix --version 4.0.6
+          wix extension add -g WixToolset.Firewall.wixext
+          wix extension list -g
 
       - name: Build
         run: go build -o NITRINOnetControlManager.exe main.go
 
       - name: Build MSI Installer
         run: |
-          wix build wix/installer.wxs -o NITRINOnetControlManager.msi -ext WixToolset.Firewall.dll
+          wix build wix/installer.wxs -o NITRINOnetControlManager.msi
 
       - name: Create service scripts
         shell: cmd
