@@ -44,7 +44,7 @@
                     </Component>
 
                     <!-- Add Firewall rule to allow port 9183 -->
-                    <Component Id="FirewallRuleComponent" Guid="c7d4e154-292b-4a4e-a9b9-024b2f809839">
+                    <!-- <Component Id="FirewallRuleComponent" Guid="c7d4e154-292b-4a4e-a9b9-024b2f809839">
                         <util:FirewallException
                             Id="FirewallException9183"
                             Name="NITRINOnet Control Manager Port 9183"
@@ -54,14 +54,14 @@
                             Profile="any"
                             Program="[#NITRINOnetControlManagerExe]"
                             Description="Allow inbound access to NITRINOnet Control Manager on port 9183"/>
-                    </Component>
+                    </Component> -->
                 </Directory>
             </Directory>
         </Directory>
 
         <Feature Id="ProductFeature" Title="NITRINOnet Control Manager" Level="1">
             <ComponentRef Id="MainExecutable" />
-            <ComponentRef Id="FirewallRuleComponent" />
+            <!-- <ComponentRef Id="FirewallRuleComponent" /> -->
         </Feature>
     </Product>
 </Wix>
