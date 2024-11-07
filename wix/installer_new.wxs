@@ -14,12 +14,7 @@
       <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager" />
     </StandardDirectory>
 
-    
-          <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
-            <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
-
-            
-          </Component>
+             
         
 
     <Feature Id="Main" Title="NITRINOnet Control Manager" Level="1">
