@@ -1,4 +1,4 @@
-<Project
+<Wix
   xmlns="http://wixtoolset.org/schemas/v4/wxs"
   xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
 >
@@ -63,4 +63,4 @@
     </Feature>
  
 
-</Project>
+</Wix>
