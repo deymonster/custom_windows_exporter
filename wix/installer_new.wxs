@@ -1,63 +1,66 @@
-<Wix
+<Project
   xmlns="http://wixtoolset.org/schemas/v4/wxs"
-  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
   xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
 >
   <Package
     Name="NITRINOnetControlManager"
     UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900"
-    Manufacturer="Deymonster"
+    Manufacturer="NITRINOnet"
     Version="1.0.0"
-  >
-    <StandartDirectory Id="ProgramFilesFolder">
-      <Directory
-        Id="NITRINOnetControlManagerFolder"
-        Name="NITRINOnet Control Manager"
-      />
-    </StandartDirectory>
+  />
+
+  <Media Id="1" EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager" >
+          <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
+            <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
+
+            <!-- Определение службы-->
+            <ServiceInstall 
+              Id="ServiceInstaller" 
+              Name="NITRINOnetControlManager" 
+              DisplayName="NITRINOnet Control Manager" 
+              Description="Service for NITRINOnet Control Manager" 
+              Start="auto" 
+              Type="ownProcess" 
+              ErrorControl="normal">
+              <ServiceConfig 
+                EventSource="Application"
+                EventMessageFile="[NITRINOnetControlManagerFolder]NITRINOnetControlManager.exe"/>
+            </ServiceInstall>
+
+            <!-- Управление службой-->
+            <ServiceControl 
+              Id="StartService" 
+              Name="NITRINOnetControlManager" 
+              Start="install" 
+              Stop="both" 
+              Remove="uninstall" 
+              Wait="yes" />
+
+            <!-- Firewall Exception -->
+            <fire:FirewallException
+                Id="FirewallException9183"
+                Name="NITRINOnetControlManager Firewall Exception Port 9183"
+                Description="Allow access to port 9183 for NITRINOnetControlManager"
+                Scope="any"
+                Port="9183"
+                Protocol="tcp"
+                Profile="all"
+                Program="[NITRINOnetControlManagerFolder]NITRINOnetControlManager.exe" 
+                Action="allow"
+                Enabled="yes"
+                />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
     <Feature Id="Main" Title="NITRINOnet Control Manager" Level="1">
-      <Component
-        iD="MainExecutable"
-        Guid="c53a0add-887f-4983-a4c1-28acafa114a8"
-        Directory="NITRINOnetControlManagerFolder"
-      >
-        <File
-          Id="NITRINOnetControlManagerExe"
-          Source="NITRINOnetControlManager.exe"
-          KeyPath="yes"
-        />
-
-        <util:ServiceInstall
-          Id="ServiceInstaller"
-          Name="NITRINOnetControlManager"
-          DisplayName="NITRINOnet Control Manager"
-          Description="Service for NITRINOnet Control Manager"
-          Start="auto"
-          Type="ownProcess"
-          ErrorControl="normal"
-        />
-
-        <util:ServiceControl
-          Id="StartService"
-          Name="NITRINOnetControlManager"
-          Start="install"
-          Stop="both"
-          Remove="uninstall"
-          Wait="yes"
-        />
-
-        <fire:FirewallException
-          Id="FirewallException9183"
-          Name="NITRINOnetControlManager Firewall Exception Port 9183"
-          Scope="any"
-          Port="9183"
-          Protocol="tcp"
-          Profile="any"
-          Action="allow"
-          Program="[#NITRINOnetControlManagerExe]"
-          Description="Allow incoming traffic on port 9183"
-        />
-      </Component>
+      <ComponentGroupRef Id="MainExecutable" />
     </Feature>
-  </Package>
-</Wix>
+ 
+
+</Project>
