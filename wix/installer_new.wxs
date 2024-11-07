@@ -54,7 +54,7 @@
               Stop="both"
               Remove="uninstall"
               Wait="yes">
-              <Condition>Installed</Condition>
+              
             </ServiceControl>
 
 
