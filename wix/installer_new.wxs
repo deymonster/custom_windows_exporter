@@ -1,6 +1,7 @@
 <Wix
   xmlns="http://wixtoolset.org/schemas/v4/wxs"
   xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
 >
   <Package
     Name="NITRINOnetControlManager"
@@ -9,15 +10,22 @@
     Version="1.0.0"
   >
 
-  <Media Id="1" EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager" />
+    </StandardDirectory>
 
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder">
-        <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager" >
+    
           <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
             <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
 
-            <!-- Определение службы-->
+            
+          </Component>
+        
+
+    <Feature Id="Main" Title="NITRINOnet Control Manager" Level="1">
+      <Component Directory="NITRINOnetControlManagerFolder" Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
+          <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
+              <!-- Определение службы-->
             <ServiceInstall 
               Id="ServiceInstaller" 
               Name="NITRINOnetControlManager" 
@@ -26,9 +34,6 @@
               Start="auto" 
               Type="ownProcess" 
               ErrorControl="normal">
-              <ServiceConfig 
-                EventSource="Application"
-                EventMessageFile="[NITRINOnetControlManagerFolder]NITRINOnetControlManager.exe"/>
             </ServiceInstall>
 
             <!-- Управление службой-->
@@ -38,7 +43,16 @@
               Start="install" 
               Stop="both" 
               Remove="uninstall" 
-              Wait="yes" />
+              Wait="yes">
+            </ServiceControl>
+
+
+            <ServiceConfig 
+                ServiceName="NITRINOnetControlManager"
+                OnInstall="yes"
+                DelayedAutoStart="yes"
+            />
+            
 
             <!-- Firewall Exception -->
             <fire:FirewallException
@@ -53,13 +67,9 @@
                 Action="allow"
                 Enabled="yes"
                 />
-          </Component>
-        </Directory>
-      </Directory>
-    </Directory>
 
-    <Feature Id="Main" Title="NITRINOnet Control Manager" Level="1">
-      <ComponentGroupRef Id="MainExecutable" />
+
+      </Component>
     </Feature>
  
   </Package>
