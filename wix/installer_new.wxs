@@ -1,7 +1,7 @@
 <Wix
   xmlns="http://wixtoolset.org/schemas/v4/wxs"
   xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
-  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+  
 >
   <Package
     Name="NITRINOnetControlManager"
@@ -11,6 +11,9 @@
     
   >
     <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
+    <Icon Id="AppIcon" SourceFile="app_ico.ico" />
+
+    <Property Id="ARPPRODUCTION" Value="AppIcon"/>
 
     <StandardDirectory Id="ProgramFilesFolder">
       <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager" />
@@ -41,6 +44,17 @@
               Stop="both" 
               Remove="uninstall" 
               Wait="yes">
+            </ServiceControl>
+
+            <!-- Удаление службы-->
+            <ServiceControl
+              Id="RemoveService"
+              Name="NITRINOnetControlManager"
+              Start="ignored"
+              Stop="both"
+              Remove="uninstall"
+              Wait="yes">
+              <Condition>Installed</Condition>
             </ServiceControl>
 
 
