@@ -8,8 +8,9 @@
     UpgradeCode="0547e595-c4be-4973-ab78-189148bc3900"
     Manufacturer="NITRINOnet"
     Version="1.0.0"
-    Compressed="no"
+    
   >
+    <Media Id="1" Cabinet="product.cab" EmbedCab="yes" />
 
     <StandardDirectory Id="ProgramFilesFolder">
       <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager" />
