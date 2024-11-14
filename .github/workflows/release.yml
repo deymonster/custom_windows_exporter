@@ -47,6 +47,11 @@ jobs:
       - name: Build Remove Service Executable
         run: go build -o uninstall/remove-service.exe ./uninstall
 
+      - name: Move Executables to Wix Folder
+        run: |
+          Move-Item -Path service\NITRINOnetControlManager.exe -Destination wix\
+          Move-Item -Path uninstall\remove-service.exe -Destination wix\
+
       - name: Install Wix Toolset and add Firewall Extension
         run: |
           dotnet tool install --global wix --version 5.0.2
