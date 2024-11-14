@@ -42,15 +42,12 @@ jobs:
         uses: microsoft/setup-msbuild@v1.1
 
       - name: Build Main Service Executable
-        run: go build -o service/NITRINOnetControlManager.exe ./service
+        run: go build -o NITRINOnetControlManager.exe ./service
 
       - name: Build Remove Service Executable
-        run: go build -o uninstall/remove-service.exe ./uninstall
+        run: go build -o remove-service.exe ./uninstall
 
-      - name: Move Executables to Wix Folder
-        run: |
-          Move-Item -Path service\NITRINOnetControlManager.exe -Destination wix\
-          Move-Item -Path uninstall\remove-service.exe -Destination wix\
+      
 
       - name: Install Wix Toolset and add Firewall Extension
         run: |
