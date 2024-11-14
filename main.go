@@ -18,6 +18,8 @@ import (
 	"node_exporter_custom/metrics"
 )
 
+const secretkey = "VERY_SECRET_KEY"
+
 // Setup logging to a file
 func setupLogging() (*os.File, error) {
 	logPath := "C:\\ProgramData\\NITRINOnetControlManager\\service.log"
@@ -39,6 +41,12 @@ type myService struct{}
 func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
 	changes <- svc.Status{State: svc.StartPending}
 
+	logFile, err := setupLogging()
+	if err != nil {
+		return
+	}
+	defer logFile.Close()
+
 	elog, err := eventlog.Open("NITRINOnetControlManager")
 	if err != nil {
 		log.Fatalf("Could not open event log: %v", err)
@@ -50,9 +58,21 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 
 	go func() {
 		initMetrics()
-		http.Handle("/metrics", promhttp.Handler())
-		log.Println("Listening on :9183")
-		log.Fatal(http.ListenAndServe(":9183", nil))
+		http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			// Check secret key in header
+			handshakeKey := r.Header.Get("X-Agent-Handshake-Key")
+			if handshakeKey != secretkey {
+				clientIP := r.RemoteAddr
+				log.Printf("Unauthorized request from IP: %s", clientIP)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			log.Printf("Received authorized request from IP: %s", r.RemoteAddr)
+			promhttp.Handler().ServeHTTP(w, r)
+		})
+
+		log.Println("Listening on :9182")
+		log.Fatal(http.ListenAndServe(":9182", nil))
 	}()
 
 	for {
