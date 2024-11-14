@@ -1,6 +1,7 @@
 <Wix
   xmlns="http://wixtoolset.org/schemas/v4/wxs"
   xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
   
 >
   <Package
@@ -16,23 +17,19 @@
     <Property Id="ARPPRODUCTION" Value="AppIcon"/>
 
     <StandardDirectory Id="ProgramFilesFolder">
-      <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager" />
-    </StandardDirectory>
+      <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager">
+          <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
+              <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
 
-                     
-
-    <Feature Id="Main" Title="NITRINOnet Control Manager" Level="1">
-      <Component Directory="NITRINOnetControlManagerFolder" Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
-          <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
               <!-- Определение службы-->
-            <ServiceInstall 
-              Id="ServiceInstaller" 
-              Name="NITRINOnetControlManager" 
-              DisplayName="NITRINOnet Control Manager" 
-              Description="Service for NITRINOnet Control Manager" 
-              Start="auto" 
-              Type="ownProcess" 
-              ErrorControl="normal">
+              <ServiceInstall 
+                Id="ServiceInstaller" 
+                Name="NITRINOnetControlManager" 
+                DisplayName="NITRINOnet Control Manager" 
+                Description="Service for NITRINOnet Control Manager" 
+                Start="auto" 
+                Type="ownProcess" 
+                ErrorControl="normal">
             </ServiceInstall>
 
             <!-- Управление службой-->
@@ -45,25 +42,14 @@
               Wait="yes">
             </ServiceControl>
 
-            <!-- Удаление службы-->
-            <ServiceControl
-              Id="RemoveService"
+            <util:ServiceConfig
+              id="ServiceConfig"
               Name="NITRINOnetControlManager"
-              Start="ignored"
-              Stop="both"
-              Remove="uninstall"
-              Wait="yes">
-              
-            </ServiceControl>
-
-
-            <ServiceConfig 
-                ServiceName="NITRINOnetControlManager"
-                OnInstall="yes"
-                DelayedAutoStart="yes"
+              DelayedAutoStart="yes"
+              OnInstall="yes"
             />
-            
 
+            
             <!-- Firewall Exception -->
             <fire:FirewallException
                 Id="FirewallException9183"
@@ -78,17 +64,23 @@
                 Enabled="yes"
                 />
 
+          </Component>
+          <Component Id="RemoveEventSourceExecutable" Guid="b33e4f98-8f79-4b29-ae96-bc1315a89988">
+              <File Id="RemoveEventSourceExe" Source="remove_service.exe" KeyPath="yes" />
+          </Component>
 
-      </Component>
-      
+      </Directory>
+    </StandardDirectory>
 
-      <Component Directory="NITRINOnetControlManagerFolder" Id="RemoveEventSourceExecutable" Guid="b33e4f98-8f79-4b29-ae96-bc1315a89988">
-          <File Id="RemoveEventSourceExe" Source="remove_event_source.exe" KeyPath="yes" />
-      </Component>
+                     
+
+    <Feature Id="Main" Title="NITRINOnet Control Manager" Level="1">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="RemoveEventSourceExecutable" />
     </Feature>
 
     
-    <CustomAction Id="RemoveEventSource" FileKey="RemoveEventSourceExe" ExeCommand="" Execute="deferred" Return="ignore" />
+    <CustomAction Id="RemoveEventSource" File="RemoveEventSourceExe" ExeCommand="" Execute="deferred" Return="ignore" />
 
     <InstallExecuteSequence>
       <Custom Action="RemoveEventSource" Before="RemoveFiles">REMOVE="ALL"</Custom>
