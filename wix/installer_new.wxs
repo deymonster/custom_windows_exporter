@@ -19,7 +19,7 @@
     <StandardDirectory Id="ProgramFilesFolder">
       <Directory Id="NITRINOnetControlManagerFolder" Name="NITRINOnet Control Manager">
           <Component Id="MainExecutable" Guid="c53a0add-887f-4983-a4c1-28acafa114a8">
-              <File Id="NITRINOnetControlManagerExe" Source="NITRINOnetControlManager.exe" KeyPath="yes" />
+              <File Id="NITRINOnetControlManagerExe" Source="service/NITRINOnetControlManager.exe" KeyPath="yes" />
 
               <!-- Определение службы-->
               <ServiceInstall 
@@ -65,7 +65,7 @@
 
           </Component>
           <Component Id="RemoveEventSourceExecutable" Guid="b33e4f98-8f79-4b29-ae96-bc1315a89988">
-              <File Id="RemoveEventSourceExe" Source="remove_service.exe" KeyPath="yes" />
+              <File Id="RemoveEventSourceExe" Source="uninstall/remove_service.exe" KeyPath="yes" />
           </Component>
 
       </Directory>
