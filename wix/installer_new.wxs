@@ -43,8 +43,7 @@
             </ServiceControl>
 
             <ServiceConfig
-              id="ServiceConfig"
-              Name="NITRINOnetControlManager"
+              ServiceName="NITRINOnetControlManager"
               DelayedAutoStart="yes"
               OnInstall="yes"
             />
@@ -80,7 +79,7 @@
     </Feature>
 
     
-    <CustomAction Id="RemoveEventSource" FileKey="RemoveEventSourceExe" Execute="deferred" Return="ignore" />
+    <CustomAction Id="RemoveEventSource" FileRef="RemoveEventSourceExe" Execute="deferred" Return="ignore" />
 
     <InstallExecuteSequence>
       <Custom Action="RemoveEventSource" Before="RemoveFiles" Condition="REMOVE='ALL'" />
