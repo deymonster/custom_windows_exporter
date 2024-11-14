@@ -20,6 +20,42 @@ import (
 
 const secretkey = "VERY_SECRET_KEY"
 
+var wlog *eventlog.Log
+
+// Install event source
+
+func installEventSource() {
+	err := eventlog.InstallAsEventCreate("NITRINOnetControlManager", eventlog.Error|eventlog.Warning|eventlog.Info)
+	if err != nil {
+		log.Printf("Failed to install logger: %v", err)
+	} else {
+		log.Println("Event source installed")
+	}
+}
+
+func removeEventSource() {
+	err := eventlog.Remove("NITRINOnetControlManager")
+	if err != nil {
+		log.Printf("Failed to remove logger: %v", err)
+	} else {
+		log.Println("Event source removed")
+	}
+}
+
+// Setup Event Log
+func setupEventLogger() {
+	var loggerName = "NITRINOnetControlManager"
+
+	var err error
+	wlog, err = eventlog.Open(loggerName)
+	if err != nil {
+		log.Fatalf("Could not open event log: %v", err)
+	} else {
+		log.Println("Event log opened")
+	}
+
+}
+
 // Setup logging to a file
 func setupLogging() (*os.File, error) {
 	logPath := "C:\\ProgramData\\NITRINOnetControlManager\\service.log"
@@ -47,13 +83,9 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 	}
 	defer logFile.Close()
 
-	elog, err := eventlog.Open("NITRINOnetControlManager")
-	if err != nil {
-		log.Fatalf("Could not open event log: %v", err)
+	if wlog != nil {
+		wlog.Info(1, "Service started successfully")
 	}
-	defer elog.Close()
-
-	elog.Info(1, "Service started")
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 
 	go func() {
@@ -64,13 +96,22 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 			if handshakeKey != secretkey {
 				clientIP := r.RemoteAddr
 				log.Printf("Unauthorized request from IP: %s", clientIP)
+				if wlog != nil {
+					wlog.Warning(2, fmt.Sprintf("Unauthorized request from IP: %s", clientIP))
+				}
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
+			}
+			if wlog != nil {
+				wlog.Info(1, fmt.Sprintf("Received authorized request from IP %s", r.RemoteAddr))
 			}
 			log.Printf("Received authorized request from IP: %s", r.RemoteAddr)
 			promhttp.Handler().ServeHTTP(w, r)
 		})
 
+		if wlog != nil {
+			wlog.Info(1, "Service listening on port 9182")
+		}
 		log.Println("Listening on :9182")
 		log.Fatal(http.ListenAndServe(":9182", nil))
 	}()
@@ -80,14 +121,20 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 		case c := <-req:
 			switch c.Cmd {
 			case svc.Stop, svc.Shutdown:
-				elog.Info(1, "Service stopping")
+				if wlog != nil {
+					wlog.Info(1, "Service stopping")
+				}
 				changes <- svc.Status{State: svc.StopPending}
 				return
 			default:
-				elog.Warning(1, "Received unknown command")
+				if wlog != nil {
+					wlog.Warning(2, "Received unknown control request")
+				}
 			}
 		case <-time.After(10 * time.Second):
-			elog.Info(1, "Service running")
+			if wlog != nil {
+				wlog.Info(1, "Service running")
+			}
 		}
 	}
 }
@@ -214,6 +261,14 @@ func main() {
 	}
 
 	defer logFile.Close()
+
+	installEventSource()
+	setupEventLogger()
+	defer func() {
+		if wlog != nil {
+			wlog.Close()
+		}
+	}()
 
 	isService, err := svc.IsWindowsService()
 	if err != nil {

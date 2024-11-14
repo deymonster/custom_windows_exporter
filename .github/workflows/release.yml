@@ -41,8 +41,11 @@ jobs:
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.1
 
-      - name: Build
-        run: go build -o NITRINOnetControlManager.exe main.go
+      - name: Build Main Service Executable
+        run: go build -o NITRINOnetControlManager.exe ./service
+
+      - name: Build Remove Service Executable
+        run: go build -o remove-service.exe ./uninstall
 
       - name: Install Wix Toolset and add Firewall Extension
         run: |
