@@ -1,7 +1,7 @@
 <Wix
   xmlns="http://wixtoolset.org/schemas/v4/wxs"
   xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall"
-  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+ 
   
 >
   <Package
@@ -42,7 +42,7 @@
               Wait="yes">
             </ServiceControl>
 
-            <util:ServiceConfig
+            <ServiceConfig
               id="ServiceConfig"
               Name="NITRINOnetControlManager"
               DelayedAutoStart="yes"
@@ -80,10 +80,10 @@
     </Feature>
 
     
-    <CustomAction Id="RemoveEventSource" File="RemoveEventSourceExe" ExeCommand="" Execute="deferred" Return="ignore" />
+    <CustomAction Id="RemoveEventSource" FileKey="RemoveEventSourceExe" Execute="deferred" Return="ignore" />
 
     <InstallExecuteSequence>
-      <Custom Action="RemoveEventSource" Before="RemoveFiles">REMOVE="ALL"</Custom>
+      <Custom Action="RemoveEventSource" Before="RemoveFiles" Condition="REMOVE='ALL'" />
     </InstallExecuteSequence>
  
   </Package>
