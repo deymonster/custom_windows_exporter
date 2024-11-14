@@ -45,7 +45,7 @@ jobs:
         run: go build -o NITRINOnetControlManager.exe ./service
 
       - name: Build Remove Service Executable
-        run: go build -o remove-service.exe ./uninstall
+        run: go build -o remove_service.exe ./uninstall
 
       
 
