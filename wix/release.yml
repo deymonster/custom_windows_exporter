@@ -1,0 +1,122 @@
+name: Build and release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version for manual release"
+        required: true
+        default: "v1.0.0"
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+     
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.23"
+
+      - name: Install dependencies
+        run: go mod tidy
+
+      # - name: Install WiX Toolset
+      #   run: |
+
+      #     choco install wixtoolset --no-progress --yes
+
+      # - name: Build MSI Installer
+      #   run: |
+      #     candle.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension wix/installer.wxs -out installer.wixobj
+      #     light.exe -ext WixUIExtension -ext WixUtilExtension -ext WixFirewallExtension -out NITRINOnetControlManager.msi installer.wixobj
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v1.1
+
+      - name: Build Main Service Executable
+        run: go build -o NITRINOnetControlManager.exe ./service
+
+      - name: Build Remove Service Executable
+        run: go build -o remove_service.exe ./uninstall
+
+      
+
+      - name: Install Wix Toolset and add Firewall Extension
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.Util.wixext 
+          wix extension add -g WixToolset.Firewall.wixext 
+          wix extension list -g
+
+      - name: Build MSI Installer
+        run: |
+          wix build -ext WixToolset.Firewall.wixext wix/installer_new.wxs -o NITRINOnetControlManager.msi
+
+      - name: Create service scripts
+        shell: cmd
+        run: |
+          echo @echo off > install-service.bat
+          echo sc create NITRINOnetControlManager binpath="%~dp0\NITRINOnetControlManager.exe" DISPLAYNAME="NITRINOnet Control Manager" start=auto >> install-service.bat
+          echo sc start NITRINOnetControlManager >> install-service.bat
+
+          echo @echo off > uninstall-service.bat
+          echo sc delete NITRINOnetControlManager >> uninstall-service.bat
+
+      - name: Create log file
+        shell: cmd
+        run: type nul > service.log
+
+      - name: Create release artifact
+        run: |
+          7z a release.zip NITRINOnetControlManager.exe install-service.bat uninstall-service.bat service.log
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-package
+          path: release.zip
+
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v3
+        with:
+          name: installer-msi
+          path: NITRINOnetControlManager.msi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            release.zip
+            NITRINOnetControlManager.msi
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GO_TOKEN }}
+
+      - name: CleanUp Artifacts
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const response = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            for (const artifact of response.data.artifacts) {
+              if (artifact.name === 'release.zip' || artifact.name === 'NITRINOnetControlManager') {
+                console.log('Deleting artifact:', artifact.name);
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id
+                });
+              }
+            }
