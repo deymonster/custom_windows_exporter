@@ -45,10 +45,11 @@ jobs:
       - name: Build InnoSetup Installer
         run: |
           "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+        shell: cmd
 
 
 
-      - name: Upload MSI installer
+      - name: Upload installer
         uses: actions/upload-artifact@v3
         with:
           name: NITRINOnetControlManagerSetup
