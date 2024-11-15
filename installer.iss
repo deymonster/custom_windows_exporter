@@ -31,7 +31,7 @@ const
 
 procedure InitializeSetup();
 begin
-  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SYSTEM\CurrentControlSet\Services\EventLog\Application\' + EventSourceName, 'EventMessageFile', '') = '' then
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SYSTEM\CurrentControlSet\Services\EventLog\Application\' + EventSourceName, 'EventMessageFile', ExpandConstant('')) = '' then
   begin
     RegWriteStringValue(HKEY_LOCAL_MACHINE, 'SYSTEM\CurrentControlSet\Services\EventLog\Application\' + EventSourceName, 'EventMessageFile', ExpandConstant('{app}\NITRINOnetControlManager.exe'));
     RegWriteDWordValue(HKEY_LOCAL_MACHINE, 'SYSTEM\CurrentControlSet\Services\EventLog\Application\' + EventSourceName, 'TypesSupported', 7);
