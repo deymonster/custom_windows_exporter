@@ -30,15 +30,21 @@ const
   EventSourceName = 'NITRINOnetControlManager';
 
 procedure InitializeSetup();
+var
+  EventSourcePath: string;
 begin
-  if RegQueryStringValue(HKEY_LOCAL_MACHINE, Concat('SYSTEM\CurrentControlSet\Services\EventLog\Application\', EventSourceName), 'EventMessageFile', '') = '' then
+  EventSourcePath := Format('SYSTEM\CurrentControlSet\Services\EventLog\Application\%s', [EventSourceName]);
+  if RegQueryStringValue(HKEY_LOCAL_MACHINE, EventSourcePath, 'EventMessageFile', '') = '' then
   begin
-    RegWriteStringValue(HKEY_LOCAL_MACHINE, Concat('SYSTEM\CurrentControlSet\Services\EventLog\Application\', EventSourceName), 'EventMessageFile', ExpandConstant('{app}\NITRINOnetControlManager.exe'));
-    RegWriteDWordValue(HKEY_LOCAL_MACHINE, Concat('SYSTEM\CurrentControlSet\Services\EventLog\Application\', EventSourceName), 'TypesSupported', 7);
+    RegWriteStringValue(HKEY_LOCAL_MACHINE, EventSourcePath, 'EventMessageFile', ExpandConstant('{app}\NITRINOnetControlManager.exe'));
+    RegWriteDWordValue(HKEY_LOCAL_MACHINE, EventSourcePath, 'TypesSupported', 7);
   end;
 end;
 
 procedure DeinitializeSetup();
+var
+  EventSourcePath: string;
 begin
-  RegDeleteKeyIncludingSubkeys(HKEY_LOCAL_MACHINE, Concat('SYSTEM\CurrentControlSet\Services\EventLog\Application\', EventSourceName));
+  EventSourcePath := Format('SYSTEM\CurrentControlSet\Services\EventLog\Application\%s', [EventSourceName]);
+  RegDeleteKeyIncludingSubkeys(HKEY_LOCAL_MACHINE, EventSourcePath);
 end;
