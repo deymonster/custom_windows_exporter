@@ -33,7 +33,7 @@ procedure InitializeSetup();
 var
   EventSourcePath: string;
 begin
-  EventSourcePath := Format('SYSTEM\CurrentControlSet\Services\EventLog\Application\%s', [EventSourceName]);
+  EventSourcePath := 'SYSTEM\CurrentControlSet\Services\EventLog\Application\' + EventSourceName;
   if RegQueryStringValue(HKEY_LOCAL_MACHINE, EventSourcePath, 'EventMessageFile', '') = '' then
   begin
     RegWriteStringValue(HKEY_LOCAL_MACHINE, EventSourcePath, 'EventMessageFile', ExpandConstant('{app}\NITRINOnetControlManager.exe'));
@@ -45,6 +45,6 @@ procedure DeinitializeSetup();
 var
   EventSourcePath: string;
 begin
-  EventSourcePath := Format('SYSTEM\CurrentControlSet\Services\EventLog\Application\%s', [EventSourceName]);
+  EventSourcePath := 'SYSTEM\CurrentControlSet\Services\EventLog\Application\' + EventSourceName;
   RegDeleteKeyIncludingSubkeys(HKEY_LOCAL_MACHINE, EventSourcePath);
 end;
