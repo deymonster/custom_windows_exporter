@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -33,14 +32,14 @@ func installEventSource() {
 	}
 }
 
-func removeEventSource() {
-	err := eventlog.Remove("NITRINOnetControlManager")
-	if err != nil {
-		log.Printf("Failed to remove logger: %v", err)
-	} else {
-		log.Println("Event source removed")
-	}
-}
+// func removeEventSource() {
+// 	err := eventlog.Remove("NITRINOnetControlManager")
+// 	if err != nil {
+// 		log.Printf("Failed to remove logger: %v", err)
+// 	} else {
+// 		log.Println("Event source removed")
+// 	}
+// }
 
 // Setup Event Log
 func setupEventLogger() {
@@ -57,18 +56,9 @@ func setupEventLogger() {
 }
 
 // Setup logging to a file
-func setupLogging() (*os.File, error) {
-	logPath := "C:\\ProgramData\\NITRINOnetControlManager\\service.log"
+func setupLogging() {
+	log.SetOutput(os.Stdout)
 
-	os.MkdirAll("C:\\ProgramData\\NITRINOnetControlManager", os.ModePerm)
-
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
-	}
-
-	log.SetOutput(io.MultiWriter(os.Stdout, f))
-	return f, nil
 }
 
 // myService - служба
@@ -76,12 +66,6 @@ type myService struct{}
 
 func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
 	changes <- svc.Status{State: svc.StartPending}
-
-	logFile, err := setupLogging()
-	if err != nil {
-		return
-	}
-	defer logFile.Close()
 
 	if wlog != nil {
 		wlog.Info(1, "Service started successfully")
@@ -255,12 +239,7 @@ func runService(name string, isService bool) {
 
 func main() {
 
-	logFile, err := setupLogging()
-	if err != nil {
-		log.Fatalf("Failed to setup logging: %v", err)
-	}
-
-	defer logFile.Close()
+	setupLogging()
 
 	installEventSource()
 	setupEventLogger()

@@ -44,7 +44,7 @@ jobs:
 
       - name: Build InnoSetup Installer
         run: |
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" simple_install.iss
         shell: cmd
 
 
