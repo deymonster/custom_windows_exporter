@@ -168,6 +168,10 @@ func initMetrics() {
 	prometheus.MustRegister(metrics.SystemInfo)
 	prometheus.MustRegister(metrics.SystemUptime)
 	metrics.RecordSystemMetrics()
+
+	prometheus.MustRegister(metrics.SystemUUID)
+	metrics.RecordUUIDMetrics()
+
 	log.Println("Metrics initialized")
 }
 
