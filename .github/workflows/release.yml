@@ -61,7 +61,7 @@ jobs:
         with:
           files: |
             
-            innosetup/NITRINOnetControlManagerSetup.exe
+            NITRINOnetControlManagerSetup.exe
 
         env:
           GITHUB_TOKEN: ${{ secrets.GO_TOKEN }}
