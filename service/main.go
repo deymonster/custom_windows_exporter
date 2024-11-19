@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows/svc"
@@ -15,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"node_exporter_custom/metrics"
+	"node_exporter_custom/watcher"
 )
 
 const secretkey = "VERY_SECRET_KEY"
@@ -72,33 +76,8 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 	}
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 
-	go func() {
-		initMetrics()
-		http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-			// Check secret key in header
-			handshakeKey := r.Header.Get("X-Agent-Handshake-Key")
-			if handshakeKey != secretkey {
-				clientIP := r.RemoteAddr
-				log.Printf("Unauthorized request from IP: %s", clientIP)
-				if wlog != nil {
-					wlog.Warning(2, fmt.Sprintf("Unauthorized request from IP: %s", clientIP))
-				}
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-			if wlog != nil {
-				wlog.Info(1, fmt.Sprintf("Received authorized request from IP %s", r.RemoteAddr))
-			}
-			log.Printf("Received authorized request from IP: %s", r.RemoteAddr)
-			promhttp.Handler().ServeHTTP(w, r)
-		})
-
-		if wlog != nil {
-			wlog.Info(1, "Service listening on port 9182")
-		}
-		log.Println("Listening on :9182")
-		log.Fatal(http.ListenAndServe(":9182", nil))
-	}()
+	stopChan := make(chan struct{})
+	go startHTTPServer(stopChan)
 
 	for {
 		select {
@@ -108,6 +87,7 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 				if wlog != nil {
 					wlog.Info(1, "Service stopping")
 				}
+				close(stopChan)
 				changes <- svc.Status{State: svc.StopPending}
 				return
 			default:
@@ -121,6 +101,49 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 			}
 		}
 	}
+}
+
+func startHTTPServer(stopChan chan struct{}) {
+
+	initMetrics()
+	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		handshakeKey := r.Header.Get("X-Agent-Handshake-Key")
+		if handshakeKey != secretkey {
+			clientIP := r.RemoteAddr
+			log.Printf("Unauthorized request from IP: %s", clientIP)
+			if wlog != nil {
+				wlog.Warning(2, fmt.Sprintf("Unauthorized request from IP: %s", clientIP))
+			}
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if wlog != nil {
+			wlog.Info(1, fmt.Sprintf("Received authorized request from IP %s", r.RemoteAddr))
+		}
+		log.Printf("Received authorized request from IP: %s", r.RemoteAddr)
+		promhttp.Handler().ServeHTTP(w, r)
+	})
+
+	server := &http.Server{Addr: ":9183"}
+
+	go func() {
+		<-stopChan
+		log.Println("Shutting down HTTP server...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("Error shutting down HTTP server: %v", err)
+		}
+	}()
+
+	if wlog != nil {
+		wlog.Info(1, "Service listening on port 9182")
+	}
+	log.Println("Listening on :9182")
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		log.Fatal(http.ListenAndServe(":9183", nil))
+	}
+
 }
 
 func initMetrics() {
@@ -256,6 +279,15 @@ func main() {
 		}
 	}()
 
+	deviceConfig, err := metrics.ReadDeviceConfig()
+	if err != nil {
+		log.Fatalf("Failed to read device config: %v", err)
+	}
+	metrics.UpdateSerialNumberMetrics(deviceConfig)
+
+	// Watch config file for changes in a separate goroutine
+	go watcher.WatchConfigFile(metrics.ConfigFilePath)
+
 	isService, err := svc.IsWindowsService()
 	if err != nil {
 		log.Fatalf("Failed to check interactive session: %v", err)
@@ -266,11 +298,26 @@ func main() {
 	if !isService {
 		log.Println("Running in interactive mode.")
 		fmt.Printf("Starting service in interactive mode...\n")
-		runService("NITRINOnetControlManager", false)
+		stopChan := make(chan struct{})
+		go runService("NITRINOnetControlManager", false)
+
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+
+		<-signalChan
+
+		log.Println("Shutting down...")
+
+		close(stopChan)
+
+		time.Sleep(5 * time.Second)
+
+		log.Println("Service stopped.")
 
 	} else {
 		log.Println("Running as service.")
 		runService("NITRINOnetControlManager", true)
 
 	}
+
 }

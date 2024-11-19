@@ -10,25 +10,25 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const configFilePath = `C:\ProgramData\NITRINOnetControlManager\config.yml`
+const ConfigFilePath = `C:\ProgramData\NITRINOnetControlManager\config.yml`
 
 type Config struct {
-	SerialNumber string `yaml:"SerialNumber"`
-	Location     string `yaml:"Location"`
-	DeviceTag    string `yaml:"DeviceTag"`
+	SerialNumber string `yaml:"serial_number"`
+	Location     string `yaml:"location"`
+	DeviceTag    string `yaml:"device_tag"`
 }
 
-func readDeviceConfig() (*Config, error) {
+func ReadDeviceConfig() (*Config, error) {
 
-	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
-		log.Printf("Config file %s does not exist, create one", configFilePath)
+	if _, err := os.Stat(ConfigFilePath); os.IsNotExist(err) {
+		log.Printf("Config file %s does not exist, create one", ConfigFilePath)
 		err := createDefaultConfigFile()
 		if err != nil {
 			return nil, fmt.Errorf("failed to create default config file: %v", err)
 		}
 	}
 
-	file, err := os.Open(configFilePath)
+	file, err := os.Open(ConfigFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -49,18 +49,11 @@ func readDeviceConfig() (*Config, error) {
 }
 
 func createDefaultConfigFile() error {
-	defaultConfig := Config{
-		SerialNumber: "unknown",
-		Location:     "unknown",
-		DeviceTag:    "unknown",
-	}
+	defaultConfigContent := `serial_number: "unknown" 
+location: "unknown" 
+device_tag: "unknown"`
 
-	data, err := yaml.Marshal(&defaultConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal default config: %v", err)
-	}
-
-	err = os.WriteFile(configFilePath, data, 0644)
+	err := os.WriteFile(ConfigFilePath, []byte(defaultConfigContent), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write default config file: %v", err)
 	}
@@ -78,9 +71,21 @@ var (
 	)
 )
 
+func UpdateSerialNumberMetrics(deviceConfig *Config) {
+	if deviceConfig != nil {
+		SerialNumberMetric.Reset()
+		SerialNumberMetric.With(prometheus.Labels{
+			"serial_number": deviceConfig.SerialNumber,
+			"location":      deviceConfig.Location,
+			"device_tag":    deviceConfig.DeviceTag,
+		}).Set(1)
+		log.Printf("Metrics updated with new config: %v", deviceConfig)
+	}
+}
+
 func RecordSNMetrics() {
 	go func() {
-		deviceConfig, err := readDeviceConfig()
+		deviceConfig, err := ReadDeviceConfig()
 		if err != nil {
 			log.Printf("Error reading device config: %v", err)
 			return
@@ -101,6 +106,8 @@ func RecordSNMetrics() {
 			deviceTag = "unknown"
 			log.Println("Device tag is empty")
 		}
+
+		SerialNumberMetric.Reset()
 		SerialNumberMetric.With(prometheus.Labels{
 			"serial_number": serialNumber,
 			"location":      location,
