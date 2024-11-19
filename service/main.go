@@ -124,7 +124,7 @@ func startHTTPServer(stopChan chan struct{}) {
 		promhttp.Handler().ServeHTTP(w, r)
 	})
 
-	server := &http.Server{Addr: ":9183"}
+	server := &http.Server{Addr: ":9182"}
 
 	go func() {
 		<-stopChan
@@ -141,7 +141,7 @@ func startHTTPServer(stopChan chan struct{}) {
 	}
 	log.Println("Listening on :9182")
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(http.ListenAndServe(":9183", nil))
+		log.Fatal(http.ListenAndServe(":9182", nil))
 	}
 
 }
