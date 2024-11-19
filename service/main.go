@@ -172,6 +172,9 @@ func initMetrics() {
 	prometheus.MustRegister(metrics.SystemUUID)
 	metrics.RecordUUIDMetrics()
 
+	prometheus.MustRegister(metrics.SerialNumberMetric)
+	metrics.RecordSNMetrics()
+
 	log.Println("Metrics initialized")
 }
 
