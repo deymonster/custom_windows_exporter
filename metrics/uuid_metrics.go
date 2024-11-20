@@ -16,7 +16,7 @@ type Win32_ComputerSystem_UUID struct {
 	Model        string
 }
 
-type Win32_NetworkAdapter struct {
+type Win32_NetworkAdapter_UUID struct {
 	MACAddress string
 }
 
@@ -34,7 +34,7 @@ var (
 func RecordUUIDMetrics() {
 	go func() {
 		var computerSystem []Win32_ComputerSystem_UUID
-		var networkAdapters []Win32_NetworkAdapter
+		var networkAdapters []Win32_NetworkAdapter_UUID
 
 		err := wmi.Query("SELECT Manufacturer, Model FROM Win32_ComputerSystem", &computerSystem)
 		if err != nil || len(computerSystem) == 0 {
@@ -53,7 +53,15 @@ func RecordUUIDMetrics() {
 
 		combinedInfo := fmt.Sprintf("%s %s %s", cs.Manufacturer, cs.Model, macAddress)
 		hash := sha256.Sum256([]byte(combinedInfo))
-		uuid := hex.EncodeToString(hash[:])
+		hashStr := hex.EncodeToString(hash[:])
+
+		uuid := fmt.Sprintf("%s-%s-%s-%s-%s",
+			hashStr[0:8],
+			hashStr[8:12],
+			"4"+hashStr[13:16],
+			"8"+hashStr[17:20],
+			hashStr[20:32],
+		)
 
 		SystemUUID.With(prometheus.Labels{
 			"uuid": uuid,
