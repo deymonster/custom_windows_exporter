@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -61,7 +62,12 @@ func setupEventLogger() {
 
 // Setup logging to a file
 func setupLogging() {
-	log.SetOutput(os.Stdout)
+	logFile, err := os.OpenFile("C:\\ProgramData\\NITRINOnetControlManager\\service.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(multiWriter)
 
 }
 
@@ -141,7 +147,7 @@ func startHTTPServer(stopChan chan struct{}) {
 	}
 	log.Println("Listening on :9182")
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(http.ListenAndServe(":9182", nil))
+		log.Printf("HTTP server closed with error: %v", err)
 	}
 
 }
