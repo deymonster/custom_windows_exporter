@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"node_exporter_custom/logmanager"
 	"node_exporter_custom/metrics"
 	"node_exporter_custom/watcher"
 )
@@ -61,15 +61,22 @@ func setupEventLogger() {
 }
 
 // Setup logging to a file
-func setupLogging() {
-	logFile, err := os.OpenFile("C:\\ProgramData\\NITRINOnetControlManager\\service.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	multiWriter := io.MultiWriter(os.Stdout, logFile)
-	log.SetOutput(multiWriter)
+// func setupLogging() {
+// 	logFile, err := os.OpenFile("C:\\ProgramData\\NITRINOnetControlManager\\service.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+// 	if err != nil {
+// 		log.Fatalf("Failed to open log file: %v", err)
+// 	}
+// 	multiWriter := io.MultiWriter(os.Stdout, logFile)
+// 	log.SetOutput(multiWriter)
 
-}
+// 	defer func() {
+// 		if logFile != nil {
+// 			logFile.Sync()
+// 			logFile.Close()
+// 		}
+// 	}()
+
+// }
 
 // myService - служба
 type myService struct{}
@@ -79,6 +86,7 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 
 	if wlog != nil {
 		wlog.Info(1, "Service started successfully")
+		logmanager.WriteLog("Service started successfully")
 	}
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 
@@ -92,6 +100,7 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 			case svc.Stop, svc.Shutdown:
 				if wlog != nil {
 					wlog.Info(1, "Service stopping")
+					logmanager.WriteLog("Service stopping")
 				}
 				close(stopChan)
 				changes <- svc.Status{State: svc.StopPending}
@@ -99,11 +108,13 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 			default:
 				if wlog != nil {
 					wlog.Warning(2, "Received unknown control request")
+					logmanager.WriteLog("Received unknown control request")
 				}
 			}
 		case <-time.After(10 * time.Second):
 			if wlog != nil {
 				wlog.Info(1, "Service running")
+				logmanager.WriteLog("Service running")
 			}
 		}
 	}
@@ -117,6 +128,7 @@ func startHTTPServer(stopChan chan struct{}) {
 		if handshakeKey != secretkey {
 			clientIP := r.RemoteAddr
 			log.Printf("Unauthorized request from IP: %s", clientIP)
+			logmanager.WriteLog(fmt.Sprintf("Unauthorized request from IP: %s", clientIP))
 			if wlog != nil {
 				wlog.Warning(2, fmt.Sprintf("Unauthorized request from IP: %s", clientIP))
 			}
@@ -125,8 +137,10 @@ func startHTTPServer(stopChan chan struct{}) {
 		}
 		if wlog != nil {
 			wlog.Info(1, fmt.Sprintf("Received authorized request from IP %s", r.RemoteAddr))
+			logmanager.WriteLog(fmt.Sprintf("Received authorized request from IP %s", r.RemoteAddr))
 		}
 		log.Printf("Received authorized request from IP: %s", r.RemoteAddr)
+		logmanager.WriteLog(fmt.Sprintf("Received authorized request from IP: %s", r.RemoteAddr))
 		promhttp.Handler().ServeHTTP(w, r)
 	})
 
@@ -139,21 +153,26 @@ func startHTTPServer(stopChan chan struct{}) {
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
 			log.Printf("Error shutting down HTTP server: %v", err)
+			logmanager.WriteLog(fmt.Sprintf("Error shutting down HTTP server: %v", err))
 		}
 	}()
 
 	if wlog != nil {
 		wlog.Info(1, "Service listening on port 9182")
+		logmanager.WriteLog("Service listening on port 9182")
 	}
 	log.Println("Listening on :9182")
+	logmanager.WriteLog("Listening on :9182")
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Printf("HTTP server closed with error: %v", err)
+		logmanager.WriteLog(fmt.Sprintf("HTTP server closed with error: %v", err))
 	}
 
 }
 
 func initMetrics() {
 	log.Println("Initializing metrics...")
+	logmanager.WriteLog("Initializing metrics...")
 	prometheus.MustRegister(metrics.BiosInfo)
 	metrics.RecordBiosInfo()
 
@@ -205,22 +224,27 @@ func initMetrics() {
 	metrics.RecordSNMetrics()
 
 	log.Println("Metrics initialized")
+	logmanager.WriteLog("Metrics initialized")
 }
 
 func runService(name string, isService bool) {
 	if !isService {
 		// Интерактивный режим
 		log.Println("Running in interactive mode.")
+		logmanager.WriteLog("Running in interactive mode.")
 		err := debug.Run(name, &myService{})
 		if err != nil {
 			log.Fatalln("Error running service in debug mode.", err)
+			logmanager.WriteLog(fmt.Sprintf("Error running service in debug mode: %v", err))
 		}
 	} else {
 		// Службный режим
 		log.Println("Running in service  mode.")
+		logmanager.WriteLog("Running in service  mode.")
 		err := svc.Run(name, &myService{})
 		if err != nil {
 			log.Fatalln("Error running service in Service Control mode.", err)
+			logmanager.WriteLog(fmt.Sprintf("Error running service in Service Control mode: %v", err))
 		}
 	}
 }
@@ -275,7 +299,11 @@ func runService(name string, isService bool) {
 
 func main() {
 
-	setupLogging()
+	logFile, err := logmanager.SetupLogging()
+	if err != nil {
+		log.Fatalf("Failed to setup logging: %v", err)
+	}
+	defer logmanager.CloseLog(logFile)
 
 	installEventSource()
 	setupEventLogger()
@@ -288,6 +316,7 @@ func main() {
 	deviceConfig, err := metrics.ReadDeviceConfig()
 	if err != nil {
 		log.Fatalf("Failed to read device config: %v", err)
+		logmanager.WriteLog(fmt.Sprintf("Failed to read device config: %v", err))
 	}
 	metrics.UpdateSerialNumberMetrics(deviceConfig)
 
@@ -297,13 +326,16 @@ func main() {
 	isService, err := svc.IsWindowsService()
 	if err != nil {
 		log.Fatalf("Failed to check interactive session: %v", err)
+		logmanager.WriteLog(fmt.Sprintf("Failed to check interactive session: %v", err))
 	}
 
 	log.Printf("Is isInteractive: %v", isService)
+	logmanager.WriteLog(fmt.Sprintf("Is isInteractive: %v", isService))
 
 	if !isService {
 		log.Println("Running in interactive mode.")
 		fmt.Printf("Starting service in interactive mode...\n")
+		logmanager.WriteLog("Starting service in interactive mode...")
 		stopChan := make(chan struct{})
 		go runService("NITRINOnetControlManager", false)
 
@@ -313,15 +345,18 @@ func main() {
 		<-signalChan
 
 		log.Println("Shutting down...")
+		logmanager.WriteLog("Shutting down...")
 
 		close(stopChan)
 
 		time.Sleep(5 * time.Second)
 
 		log.Println("Service stopped.")
+		logmanager.WriteLog("Service stopped.")
 
 	} else {
 		log.Println("Running as service.")
+		logmanager.WriteLog("Running as service.")
 		runService("NITRINOnetControlManager", true)
 
 	}
