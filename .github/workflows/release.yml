@@ -14,6 +14,9 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      actions: write
+      contents: write
 
     steps:
       - name: Checkout code
@@ -68,7 +71,7 @@ jobs:
 
       - name: CleanUp Artifacts
         if: always()
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const response = await github.rest.actions.listArtifactsForRepo({
@@ -85,3 +88,5 @@ jobs:
                 });
               }
             }
+        
+
