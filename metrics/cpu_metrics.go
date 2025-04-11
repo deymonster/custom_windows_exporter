@@ -15,8 +15,9 @@ type Win32_ThermalZoneInformation struct {
 }
 
 type Win32_Processor struct {
-	Name           string
-	LoadPercentage uint32
+	Name                      string
+	LoadPercentage            uint32
+	NumberOfLogicalProcessors uint32
 }
 
 var (
@@ -26,7 +27,7 @@ var (
 			Name: "cpu_usage_percent",
 			Help: "Current CPU usage in percent",
 		},
-		[]string{"core", "processor"},
+		[]string{"core", "processor", "logical_cores"},
 	)
 
 	// CPU Temperature
@@ -51,8 +52,9 @@ func RecordCPUInfo() {
 			} else {
 				for i, processor := range processors {
 					CpuUsage.With(prometheus.Labels{
-						"core":      fmt.Sprintf("core_%d", i),
-						"processor": processor.Name,
+						"core":          fmt.Sprintf("core_%d", i),
+						"processor":     processor.Name,
+						"logical_cores": fmt.Sprintf("%d", processor.NumberOfLogicalProcessors),
 					}).Set(float64(processor.LoadPercentage))
 				}
 			}
