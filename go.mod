@@ -1,12 +1,14 @@
 module node_exporter_custom
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.2
 
 require (
 	github.com/StackExchange/wmi v1.2.1
 	github.com/prometheus/client_golang v1.20.4
 	github.com/shirou/gopsutil v3.21.11+incompatible
-	golang.org/x/sys v0.26.0
+	golang.org/x/sys v0.32.0
 )
 
 require (
@@ -19,6 +21,7 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.8.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
