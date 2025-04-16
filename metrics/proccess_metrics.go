@@ -244,7 +244,7 @@ func RecordProccessInfo() {
 				ProccessMemoryUsage.With(prometheus.Labels{
 					"process": proc.Name,
 					"pid":     fmt.Sprint(proc.PID),
-				}).Set(float64(memInfo.PrivateUsage))
+				}).Set(float64(memInfo.WorkingSetSize))
 
 				ProccessCPUUsage.With(prometheus.Labels{
 					"process": proc.Name,
