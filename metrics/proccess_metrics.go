@@ -239,18 +239,27 @@ func RecordProccessInfo() {
 				if ret == 0 {
 					continue
 				}
+				log.Printf("Process: %s (PID: %d)\n"+
+					"Memory: WorkingSet=%.2f MB, Private=%.2f MB\n"+
+					"CPU Usage: %.2f%%",
+					proc.Name,
+					proc.PID,
+					float64(memInfo.WorkingSetSize)/(1024*1024),
+					float64(memInfo.PrivateUsage)/(1024*1024),
+					cpuUsage)
 
 				// Устанавливаем метрики для каждого процесса
 				ProccessMemoryUsage.With(prometheus.Labels{
 					"process": proc.Name,
 					"pid":     fmt.Sprint(proc.PID),
-				}).Set(float64(memInfo.WorkingSetSize))
+				}).Set(float64(memInfo.PrivateUsage) / 1024 / 1024)
 
 				ProccessCPUUsage.With(prometheus.Labels{
 					"process": proc.Name,
 					"pid":     fmt.Sprint(proc.PID),
 				}).Set(cpuUsage)
 			}
+			prevSystemTime = currentSystemTime
 
 			// Закрываем хэндлы процессов
 			cleanupHandles(processes)
