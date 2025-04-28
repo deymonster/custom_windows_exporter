@@ -179,6 +179,10 @@ func initMetrics() {
 	prometheus.MustRegister(metrics.ProccessCount)
 	prometheus.MustRegister(metrics.ProccessMemoryUsage)
 	prometheus.MustRegister(metrics.ProccessCPUUsage)
+	prometheus.MustRegister(metrics.ProcessInstanceCount)
+	prometheus.MustRegister(metrics.ProcessGroupMemoryWorkingSet)
+	prometheus.MustRegister(metrics.ProcessGroupMemoryPrivate)
+	prometheus.MustRegister(metrics.ProcessGroupCPUUsage)
 	metrics.RecordProccessInfo()
 
 	prometheus.MustRegister(metrics.CpuUsage)

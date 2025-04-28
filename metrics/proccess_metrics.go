@@ -3,6 +3,7 @@ package metrics
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -21,7 +22,7 @@ var (
 	ProccessMemoryUsage = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "active_proccess_memory_usage",
-			Help: "Memory usage for each active proccess",
+			Help: "Memory usage for each active proccess in MB",
 		},
 		[]string{"process", "pid"},
 	)
@@ -32,6 +33,39 @@ var (
 			Help: "CPU usage for each active proccess",
 		},
 		[]string{"process", "pid"},
+	)
+
+	ProcessInstanceCount = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_instance_count",
+			Help: "Number of instances of each process",
+		},
+		[]string{"process"},
+	)
+	
+	// Новые метрики для агрегированных данных по группам процессов
+	ProcessGroupMemoryWorkingSet = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_group_memory_workingset_mb",
+			Help: "Total WorkingSet memory usage for all instances of a process in MB",
+		},
+		[]string{"process", "instances"},
+	)
+	
+	ProcessGroupMemoryPrivate = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_group_memory_private_mb",
+			Help: "Total Private memory usage for all instances of a process in MB",
+		},
+		[]string{"process", "instances"},
+	)
+	
+	ProcessGroupCPUUsage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "process_group_cpu_usage_percent",
+			Help: "Total CPU usage for all instances of a process",
+		},
+		[]string{"process", "instances"},
 	)
 )
 
@@ -94,10 +128,10 @@ func getProcessList() ([]ProcessInfo, error) {
 	}
 	defer windows.CloseHandle(snapshot)
 
-	var entry windows.ProcessEntry32
+	var entry PROCESSENTRY32
 	entry.Size = uint32(unsafe.Sizeof(entry))
 
-	err = windows.Process32First(snapshot, &entry)
+	err = windows.Process32First(snapshot, (*windows.ProcessEntry32)(unsafe.Pointer(&entry)))
 	if err != nil {
 		return nil, err
 	}
@@ -112,21 +146,24 @@ func getProcessList() ([]ProcessInfo, error) {
 			HasHandle: false,
 		}
 
-		handle, err := windows.OpenProcess(
-			windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ,
-			false,
-			processID,
-		)
+		// Не открываем хэндл для системных процессов с PID 0 и 4
+		if processID != 0 && processID != 4 {
+			handle, err := windows.OpenProcess(
+				windows.PROCESS_QUERY_INFORMATION|windows.PROCESS_VM_READ,
+				false,
+				processID,
+			)
 
-		if err == nil {
-			proc.Handle = handle
-			proc.HasHandle = true
+			if err == nil {
+				proc.Handle = handle
+				proc.HasHandle = true
+			}
 		}
 
 		processes = append(processes, proc)
 
 		// Получаем следующий процесс
-		err = windows.Process32Next(snapshot, &entry)
+		err = windows.Process32Next(snapshot, (*windows.ProcessEntry32)(unsafe.Pointer(&entry)))
 		if err != nil {
 			break
 		}
@@ -147,11 +184,31 @@ func cleanupHandles(processes []ProcessInfo) {
 	}
 }
 
+// Безопасно получает системное время
+func getSystemTimeSafe() (uint64, error) {
+	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
+	getSystemTimes := kernel32.NewProc("GetSystemTimes")
+	
+	var idleTime, kernelTime, userTime windows.Filetime
+	ret, _, err := getSystemTimes.Call(
+		uintptr(unsafe.Pointer(&idleTime)),
+		uintptr(unsafe.Pointer(&kernelTime)),
+		uintptr(unsafe.Pointer(&userTime)),
+	)
+	
+	if ret == 0 {
+		return 0, fmt.Errorf("GetSystemTimes failed: %v", err)
+	}
+	
+	return filetimeToUint64(kernelTime) + filetimeToUint64(userTime), nil
+}
+
 func RecordProccessInfo() {
 	go func() {
 		// Инициализация структур для отслеживания времени
 		prevProcessTimes := make(map[uint32]uint64)
 		var prevSystemTime uint64
+		var mutex sync.Mutex // Для безопасного доступа к prevProcessTimes
 
 		// Инициализация PSAPI
 		psapi := windows.NewLazySystemDLL("psapi.dll")
@@ -165,7 +222,13 @@ func RecordProccessInfo() {
 		// Вызов GetSystemInfo
 		_, _, _ = getSystemInfo.Call(uintptr(unsafe.Pointer(&si)))
 		cpuCores := float64(si.NumberOfProcessors)
+		
+		// Логируем информацию о системе
+		log.Printf("System has %d CPU cores", si.NumberOfProcessors)
 
+		// Счетчик ошибок для GetSystemTimes
+		systemTimesErrorCount := 0
+		
 		for {
 			// Получаем список процессов
 			processes, err := getProcessList()
@@ -176,25 +239,62 @@ func RecordProccessInfo() {
 			}
 
 			// Устанавливаем общее количество процессов
-			ProccessCount.Set(float64(len(processes)))
+			totalProcesses := len(processes)
+			ProccessCount.Set(float64(totalProcesses))
+			log.Printf("Total active processes: %d", totalProcesses)
+			
+			// Группируем процессы по имени для подсчета экземпляров и суммирования ресурсов
+			processGroups := make(map[string][]ProcessInfo)
+			for _, proc := range processes {
+				processGroups[proc.Name] = append(processGroups[proc.Name], proc)
+			}
+			
+			// Логируем информацию о группах процессов с несколькими экземплярами
+			log.Printf("Process instance counts:")
+			for name, procs := range processGroups {
+				count := len(procs)
+				ProcessInstanceCount.With(prometheus.Labels{
+					"process": name,
+				}).Set(float64(count))
+				
+				if count > 1 {
+					log.Printf("  %s: %d instances", name, count)
+				}
+			}
 
-			// Получение системного времени
-			getSystemTimes := kernel32.NewProc("GetSystemTimes")
-			var idleTime, kernelTime, userTime windows.Filetime
-			ret, _, err := getSystemTimes.Call(
-				uintptr(unsafe.Pointer(&idleTime)),
-				uintptr(unsafe.Pointer(&kernelTime)),
-				uintptr(unsafe.Pointer(&userTime)),
-			)
-			if ret == 0 {
-				log.Printf("GetSystemTimes failed: %v", err)
+			// Получение системного времени с обработкой ошибок
+			currentSystemTime, err := getSystemTimeSafe()
+			if err != nil {
+				systemTimesErrorCount++
+				log.Printf("GetSystemTimes error (%d occurrences): %v", systemTimesErrorCount, err)
+				
+				if systemTimesErrorCount >= 3 {
+					log.Printf("Too many GetSystemTimes errors, resetting counters")
+					mutex.Lock()
+					prevProcessTimes = make(map[uint32]uint64)
+					prevSystemTime = 0
+					mutex.Unlock()
+					systemTimesErrorCount = 0
+				}
+				
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			currentSystemTime := filetimeToUint64(kernelTime) + filetimeToUint64(userTime)
+			
+			systemTimesErrorCount = 0 // Сбрасываем счетчик ошибок при успешном вызове
+			
+			// Создаем новую карту для текущих процессов
+			currentPIDs := make(map[uint32]bool)
+			
+			// Карты для хранения агрегированных данных по группам процессов
+			totalMemoryWorkingSet := make(map[string]float64)
+			totalMemoryPrivate := make(map[string]float64)
+			totalCPU := make(map[string]float64)
 
 			// Обрабатываем каждый процесс
 			for _, proc := range processes {
+				currentPIDs[proc.PID] = true
+				
 				if !proc.HasHandle {
 					continue
 				}
@@ -217,54 +317,126 @@ func RecordProccessInfo() {
 
 				// Расчет загрузки CPU
 				cpuUsage := 0.0
+				mutex.Lock()
 				if prevSystemTime > 0 && prevProcessTimes[proc.PID] > 0 {
 					timeDelta := currentSystemTime - prevSystemTime
 					processDelta := currentProcessTime - prevProcessTimes[proc.PID]
 
 					if timeDelta > 0 {
-						cpuUsage = (float64(processDelta) / float64(timeDelta)) * 100 / cpuCores
+						cpuUsage = (float64(processDelta) / float64(timeDelta)) * 100.0
+						
+						// Нормализуем по количеству ядер
+						if cpuUsage > 0 {
+							cpuUsage = cpuUsage / cpuCores
+						}
+						
+						// Ограничиваем максимальное значение до 100%
+						if cpuUsage > 100.0 {
+							cpuUsage = 100.0
+						}
 					}
 				}
 				prevProcessTimes[proc.PID] = currentProcessTime
+				mutex.Unlock()
 
 				// Получение информации о памяти
 				var memInfo PROCESS_MEMORY_COUNTERS_EX
 				memInfo.CB = uint32(unsafe.Sizeof(memInfo))
-				ret, _, _ = getProcessMemoryInfo.Call(
+				ret, _, _ := getProcessMemoryInfo.Call(
 					uintptr(proc.Handle),
 					uintptr(unsafe.Pointer(&memInfo)),
 					uintptr(memInfo.CB),
 				)
 
+				// Преобразуем байты в мегабайты
+				var workingSetMB, privateMB float64
+				
 				if ret == 0 {
-					continue
+					// Если не удалось получить информацию о памяти, используем нулевые значения
+					// но продолжаем обработку процесса
+					workingSetMB = 0
+					privateMB = 0
+				} else {
+					workingSetMB = float64(memInfo.WorkingSetSize) / (1024 * 1024)
+					privateMB = float64(memInfo.PrivateUsage) / (1024 * 1024)
 				}
-				log.Printf("Process: %s (PID: %d)\n"+
-					"Memory: WorkingSet=%.2f MB, Private=%.2f MB\n"+
-					"CPU Usage: %.2f%%",
-					proc.Name,
-					proc.PID,
-					float64(memInfo.WorkingSetSize)/(1024*1024),
-					float64(memInfo.PrivateUsage)/(1024*1024),
-					cpuUsage)
+				
+				// Суммируем ресурсы по группам процессов
+				totalMemoryWorkingSet[proc.Name] += workingSetMB
+				totalMemoryPrivate[proc.Name] += privateMB
+				totalCPU[proc.Name] += cpuUsage
+				
+				// Логируем только для важных процессов или с высоким использованием ресурсов
+				if cpuUsage > 0.5 || workingSetMB > 100.0 {
+					log.Printf("Process: %s (PID: %d) - Memory: WorkingSet=%.2f MB, Private=%.2f MB, CPU: %.2f%%",
+						proc.Name,
+						proc.PID,
+						workingSetMB,
+						privateMB,
+						cpuUsage)
+				}
 
-				// Устанавливаем метрики для каждого процесса
-				ProccessMemoryUsage.With(prometheus.Labels{
-					"process": proc.Name,
-					"pid":     fmt.Sprint(proc.PID),
-				}).Set(float64(memInfo.PrivateUsage) / 1024 / 1024)
+				// Устанавливаем метрики для каждого процесса только если есть реальные данные
+				// (чтобы не засорять Prometheus нулевыми значениями)
+				if workingSetMB > 0 || privateMB > 0 || cpuUsage > 0 {
+					ProccessMemoryUsage.With(prometheus.Labels{
+						"process": proc.Name,
+						"pid":     fmt.Sprint(proc.PID),
+					}).Set(workingSetMB) // Используем WorkingSetSize как в Task Manager
 
-				ProccessCPUUsage.With(prometheus.Labels{
-					"process": proc.Name,
-					"pid":     fmt.Sprint(proc.PID),
-				}).Set(cpuUsage)
+					ProccessCPUUsage.With(prometheus.Labels{
+						"process": proc.Name,
+						"pid":     fmt.Sprint(proc.PID),
+					}).Set(cpuUsage)
+				}
+			}
+			
+			// Логируем агрегированные данные для групп процессов с несколькими экземплярами
+			log.Printf("Aggregated process resource usage:")
+			for name, procs := range processGroups {
+				instanceCount := len(procs)
+				
+				// Устанавливаем метрики для всех процессов, даже с одним экземпляром
+				ProcessGroupMemoryWorkingSet.With(prometheus.Labels{
+					"process":   name,
+					"instances": fmt.Sprint(instanceCount),
+				}).Set(totalMemoryWorkingSet[name])
+				
+				ProcessGroupMemoryPrivate.With(prometheus.Labels{
+					"process":   name,
+					"instances": fmt.Sprint(instanceCount),
+				}).Set(totalMemoryPrivate[name])
+				
+				ProcessGroupCPUUsage.With(prometheus.Labels{
+					"process":   name,
+					"instances": fmt.Sprint(instanceCount),
+				}).Set(totalCPU[name])
+				
+				// Логируем только процессы с несколькими экземплярами или значительным использованием ресурсов
+				if instanceCount > 1 || totalMemoryWorkingSet[name] > 50 || totalCPU[name] > 1.0 {
+					log.Printf("  %s (%d instances) - Total Memory: WorkingSet=%.2f MB, Private=%.2f MB, Total CPU: %.2f%%",
+						name,
+						instanceCount,
+						totalMemoryWorkingSet[name],
+						totalMemoryPrivate[name],
+						totalCPU[name])
+				}
+			}
+			
+			// Очищаем prevProcessTimes от завершенных процессов
+			mutex.Lock()
+			for pid := range prevProcessTimes {
+				if !currentPIDs[pid] {
+					delete(prevProcessTimes, pid)
+				}
 			}
 			prevSystemTime = currentSystemTime
+			mutex.Unlock()
 
 			// Закрываем хэндлы процессов
 			cleanupHandles(processes)
 
-			// Ждем 5 секунд перед следующим обновлением
+			// Ждем перед следующим обновлением
 			time.Sleep(5 * time.Second)
 		}
 	}()

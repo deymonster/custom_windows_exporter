@@ -1,13 +1,17 @@
 package logmanager
 
 import (
-	"log"
 	"fmt"
 	"io"
+	"log"
 	"os"
 )
 
+// For production
 const LogFilePath = `C:\ProgramData\NITRINOnetControlManager\service.log`
+
+// For testing
+//const LogFilePath = `service_test.log`
 
 func CreateLogFile() error {
 	if _, err := os.Stat(LogFilePath); os.IsNotExist(err) {
@@ -22,7 +26,7 @@ func CreateLogFile() error {
 
 func SetupLogging() (*os.File, error) {
 	err := CreateLogFile()
-	if err !=nil {
+	if err != nil {
 		return nil, err
 	}
 
