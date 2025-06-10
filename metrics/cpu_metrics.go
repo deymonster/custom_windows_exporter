@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"time"
@@ -38,7 +40,22 @@ var (
 		},
 		[]string{"sensor"},
 	)
+
+	// Processor Hash
+	ProcessorHash = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "processor_hash",
+			Help: "Hash of the processor",
+		},
+		[]string{"core", "processor", "logical_cores"},
+	)
 )
+
+func hashStringToFloat64(s string) float64 {
+	h := sha256.Sum256([]byte(s))
+	hashNum := binary.LittleEndian.Uint64(h[:8])
+	return float64(hashNum)
+}
 
 func RecordCPUInfo() {
 	go func() {
@@ -51,6 +68,11 @@ func RecordCPUInfo() {
 				log.Printf("Error getting cpu info: %v", err)
 			} else {
 				for i, processor := range processors {
+					hashValue := hashStringToFloat64(processor.Name)
+					ProcessorHash.With(prometheus.Labels{
+						"core": fmt.Sprintf("core_%d", i),
+					}).Set(hashValue)
+
 					CpuUsage.With(prometheus.Labels{
 						"core":          fmt.Sprintf("core_%d", i),
 						"processor":     processor.Name,
@@ -72,6 +94,7 @@ func RecordCPUInfo() {
 					}).Set(tempC)
 				}
 			}
+
 			time.Sleep(5 * time.Second)
 		}
 	}()

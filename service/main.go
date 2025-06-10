@@ -187,6 +187,7 @@ func initMetrics() {
 
 	prometheus.MustRegister(metrics.CpuUsage)
 	prometheus.MustRegister(metrics.CpuTemperature)
+	prometheus.MustRegister(metrics.ProcessorHash)
 	metrics.RecordCPUInfo()
 
 	prometheus.MustRegister(metrics.MemoryModuleInfo)
