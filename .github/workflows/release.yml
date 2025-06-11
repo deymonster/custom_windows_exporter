@@ -48,7 +48,22 @@ jobs:
           "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" simple_install.iss
         shell: cmd
 
+      - name: Debug: List files in workspace
+        run: |
+          echo "Current working directory: %cd"
+          dir /s /b
+        shell: cmd
 
+      - name: Debug: Check if installer exists
+        run: |
+          if exist NITRINOnetControlManagerSetup.exe (
+            echo "Installer exists"
+          ) else (
+            echo "Installer does not exist"
+            dir /s /b
+            exit 1
+          )
+        shell: cmd
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
@@ -61,9 +76,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: ${{ github.workspace }}/NITRINOnetControlManagerSetup.exe
-                 
         env:
-          GITHUB_TOKEN: ${{ secrets.GO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN  }}
 
       - name: CleanUp Artifacts
         if: always()
