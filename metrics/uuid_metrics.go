@@ -38,7 +38,7 @@ var (
 	)
 )
 
-func generateHradwareUUID() (string, error) {
+func generateHardwareUUID() (string, error) {
 	var sb strings.Builder
 
 	// 1. Получаем информацию о BIOS
@@ -133,35 +133,11 @@ func generateHradwareUUID() (string, error) {
 // Функция для получения аппаратных данных и генерации UUID
 func RecordUUIDMetrics() {
 	go func() {
-		var computerSystem []Win32_ComputerSystem_UUID
-		var networkAdapters []Win32_NetworkAdapter_UUID
-
-		err := wmi.Query("SELECT Manufacturer, Model FROM Win32_ComputerSystem", &computerSystem)
-		if err != nil || len(computerSystem) == 0 {
-			log.Printf("Error getting computer system info: %v", err)
+		uuid, err := generateHardwareUUID()
+		if err != nil {
+			log.Printf("Failed to generate hardware UUID: %v", err)
 			return
 		}
-
-		err = wmi.Query("SELECT MACAddress, Manufacturer, NetEnabled, PNPDeviceID FROM Win32_NetworkAdapter WHERE MACAddress IS NOT NULL AND PhysicalAdapter = TRUE", &networkAdapters)
-		if err != nil || len(networkAdapters) == 0 {
-			log.Printf("Error getting network adapter info: %v", err)
-			return
-		}
-
-		cs := computerSystem[0]
-		macAddress := networkAdapters[0].MACAddress
-
-		combinedInfo := fmt.Sprintf("%s %s %s", cs.Manufacturer, cs.Model, macAddress)
-		hash := sha256.Sum256([]byte(combinedInfo))
-		hashStr := hex.EncodeToString(hash[:])
-
-		uuid := fmt.Sprintf("%s-%s-%s-%s-%s",
-			hashStr[0:8],
-			hashStr[8:12],
-			"4"+hashStr[13:16],
-			"8"+hashStr[17:20],
-			hashStr[20:32],
-		)
 
 		SystemUUID.With(prometheus.Labels{
 			"uuid": uuid,
