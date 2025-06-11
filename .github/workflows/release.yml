@@ -48,13 +48,13 @@ jobs:
           "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" simple_install.iss
         shell: cmd
 
-      - name: Debug: List files in workspace
+      - name: Debug List files in workspace
         run: |
           echo "Current working directory: %cd"
           dir /s /b
         shell: cmd
 
-      - name: Debug: Check if installer exists
+      - name: Debug Check if installer exists
         run: |
           if exist NITRINOnetControlManagerSetup.exe (
             echo "Installer exists"
