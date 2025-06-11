@@ -1,8 +1,6 @@
 package metrics
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"log"
 	"time"
@@ -40,39 +38,51 @@ var (
 		},
 		[]string{"sensor"},
 	)
-
-	// Processor Hash
-	ProcessorHash = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "processor_hash",
-			Help: "Hash of the processor",
-		},
-		[]string{"core", "processor", "logical_cores"},
-	)
 )
 
-func hashStringToFloat64(s string) float64 {
-	h := sha256.Sum256([]byte(s))
-	hashNum := binary.LittleEndian.Uint64(h[:8])
-	return float64(hashNum)
+// getCpuInfo retrieves information about all processors in the system
+// by querying the Win32_Processor WMI class. It returns a slice of
+// Win32_Processor structs containing details such as processor name,
+// load percentage, and number of logical processors.
+
+func GetCPUInfo() ([]Win32_Processor, error) {
+	var processors []Win32_Processor
+	err := wmi.Query("SELECT * FROM Win32_Processor", &processors)
+	if err != nil {
+		return nil, fmt.Errorf("error getting cpu info: %v", err)
+	}
+	return processors, nil
 }
+
+// GetCPUTemperature retrieves temperature information for the CPU
+// by querying the Win32_PerfRawData_Counters_ThermalZoneInformation WMI class.
+// It returns a slice of Win32_ThermalZoneInformation structs containing
+// the names and temperatures of the thermal zones, or an error if the query fails.
+
+func GetCPUTemperature() ([]Win32_ThermalZoneInformation, error) {
+	var temps []Win32_ThermalZoneInformation
+	err := wmi.Query("SELECT Name, Temperature FROM Win32_PerfRawData_Counters_ThermalZoneInformation", &temps)
+	if err != nil {
+		return nil, fmt.Errorf("error getting cpu temperature: %v", err)
+	}
+	return temps, nil
+}
+
+// RecordCPUInfo continuously collects and records CPU metrics including
+// CPU usage and temperature. It retrieves processor load percentages
+// and thermal zone temperatures using WMI queries. The collected data
+// is then recorded using Prometheus metrics. This function runs
+// indefinitely, updating metrics every 5 seconds.
 
 func RecordCPUInfo() {
 	go func() {
 		for {
-			// cpu usage
-			var processors []Win32_Processor
-			err := wmi.Query("SELECT * FROM Win32_Processor", &processors)
-
+			// Получаем и записываем информацию о загрузке процессора
+			processors, err := GetCPUInfo()
 			if err != nil {
-				log.Printf("Error getting cpu info: %v", err)
+				log.Printf("%v", err)
 			} else {
 				for i, processor := range processors {
-					hashValue := hashStringToFloat64(processor.Name)
-					ProcessorHash.With(prometheus.Labels{
-						"core": fmt.Sprintf("core_%d", i),
-					}).Set(hashValue)
-
 					CpuUsage.With(prometheus.Labels{
 						"core":          fmt.Sprintf("core_%d", i),
 						"processor":     processor.Name,
@@ -81,11 +91,10 @@ func RecordCPUInfo() {
 				}
 			}
 
-			// cpu temperature
-			var temps []Win32_ThermalZoneInformation
-			err = wmi.Query("SELECT Name, Temperature FROM Win32_PerfRawData_Counters_ThermalZoneInformation", &temps)
+			// Получаем и записываем информацию о температуре
+			temps, err := GetCPUTemperature()
 			if err != nil {
-				log.Printf("Error getting cpu info: %v", err)
+				log.Printf("%v", err)
 			} else {
 				for _, temp := range temps {
 					tempC := float64(temp.Temperature) - 273.15

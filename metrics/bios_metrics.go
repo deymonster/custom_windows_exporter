@@ -36,27 +36,31 @@ func parseWMIDate(wmiDate string) (string, error) {
 	return parseDate.Format("2006-01-02"), nil
 }
 
-func RecordBiosInfo() {
+func GetBiosInfo() ([]Win32_BIOS, error) {
 	var bios []Win32_BIOS
 	err := wmi.Query("SELECT Manufacturer, Version, ReleaseDate FROM Win32_BIOS", &bios)
-
 	if err != nil {
+		return nil, err
+	}
+	return bios, nil
+}
+
+func RecordBiosInfo() {
+	biosData, err := GetBiosInfo()
+	if err != nil || len(biosData) == 0 {
 		log.Printf("Error getting bios info: %v", err)
 		return
 	}
-
-	if len(bios) > 0 {
-		bios := bios[0]
-
-		formattedDate, err := parseWMIDate(bios.ReleaseDate)
-		if err != nil {
-			log.Printf("Error parsing bios release date: %v", err)
-			return
-		}
-		BiosInfo.With(prometheus.Labels{
-			"manufacturer": bios.Manufacturer,
-			"version":      bios.Version,
-			"release_date": formattedDate,
-		}).Set(1)
+	bios := biosData[0]
+	formattedDate, err := parseWMIDate(bios.ReleaseDate)
+	if err != nil {
+		log.Printf("Error parsing bios release date: %v", err)
+		return
 	}
+
+	BiosInfo.With(prometheus.Labels{
+		"manufacturer": bios.Manufacturer,
+		"version":      bios.Version,
+		"release_date": formattedDate,
+	}).Set(1)
 }

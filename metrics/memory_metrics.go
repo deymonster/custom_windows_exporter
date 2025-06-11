@@ -51,16 +51,47 @@ var (
 	)
 )
 
-func RecordMemoryModuleInfo() {
+
+// GetMemoryModules retrieves information about physical memory modules in the system
+// by querying the Win32_PhysicalMemory WMI class. It returns a slice of
+// Win32_PhysicalMemory structs containing details such as capacity, manufacturer,
+// part number, serial number, and speed, or an error if the query fails.
+
+func GetMemoryModules() ([]Win32_PhysicalMemory, error) {
 	var memModules []Win32_PhysicalMemory
 	err := wmi.Query("SELECT Capacity, Manufacturer, PartNumber, SerialNumber, Speed FROM Win32_PhysicalMemory", &memModules)
+	if err != nil {
+		return nil, fmt.Errorf("error getting memory modules info: %v", err)
+	}
+	return memModules, nil
+}
+
+
+// GetMemoryUsage retrieves information about virtual memory usage on the system.
+// It returns a mem.VirtualMemoryStat struct containing details such as total,
+// used, free, and cached memory, or an error if the query fails.
+func GetMemoryUsage() (*mem.VirtualMemoryStat, error) {
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return nil, fmt.Errorf("error getting memory usage: %v", err)
+	}
+	return v, nil
+}
+
+
+// RecordMemoryModuleInfo records information about physical memory modules in the system
+// to prometheus metrics. It records the capacity in GB, manufacturer, part number, serial
+// number, and speed of each module. It runs in a separate goroutine and updates the
+// metrics every 5 seconds.
+func RecordMemoryModuleInfo() {
+	modules, err := GetMemoryModules()
 
 	if err != nil {
 		log.Printf("Error getting memory info: %v", err)
 		return
 	}
 
-	for _, module := range memModules {
+	for _, module := range modules {
 		memoryInGb := float64(module.Capacity) / (1024 * 1024 * 1024)
 
 		MemoryModuleInfo.With(prometheus.Labels{
@@ -72,19 +103,22 @@ func RecordMemoryModuleInfo() {
 		}).Set(memoryInGb)
 	}
 }
+// RecordMemoryUsage records virtual memory usage on the system in prometheus metrics.
+// It records total, used, and free memory in bytes. It runs in a separate goroutine
+// and updates the metrics every 5 seconds.
 
 func RecordMemoryUsage() {
 	go func() {
 		for {
-			v, err := mem.VirtualMemory()
+			memStat, err := GetMemoryUsage()
 			if err != nil {
 				log.Printf("Error getting memory info: %v", err)
 				return
 			}
 
-			TotalMemory.Set(float64(v.Total))
-			UsedMemory.Set(float64(v.Used))
-			FreeMemory.Set(float64(v.Available))
+			TotalMemory.Set(float64(memStat.Total))
+			UsedMemory.Set(float64(memStat.Used))
+			FreeMemory.Set(float64(memStat.Available))
 
 			time.Sleep(5 * time.Second)
 		}
