@@ -9,6 +9,8 @@ import (
 
 	"github.com/StackExchange/wmi"
 	"github.com/prometheus/client_golang/prometheus"
+	"node_exporter_custom/registryutil"
+	
 )
 
 // Структуры для хранения информации о системе и операционной системе
@@ -37,6 +39,14 @@ var (
 		},
 	)
 )
+
+// generateHardwareUUID generates a unique hardware UUID for the system by
+// collecting various hardware and system information. It retrieves data from
+// the BIOS, CPU, physical disks, computer system, network adapters,
+// motherboard, memory modules, and GPUs. The function constructs a string
+// containing all collected information, generates a SHA-256 hash from it, and
+// formats the hash into a UUID-like string. If any information retrieval fails,
+// it returns an error.
 
 func generateHardwareUUID() (string, error) {
 	var sb strings.Builder
@@ -130,13 +140,23 @@ func generateHardwareUUID() (string, error) {
 
 }
 
-// Функция для получения аппаратных данных и генерации UUID
+
+// RecordUUIDMetrics runs in a separate goroutine and records the unique hardware
+// UUID of the system into a Prometheus metric. It generates the UUID by collecting
+// various hardware and system information, and updates the metric with the UUID.
+// The function logs an error if the UUID generation fails.
+
 func RecordUUIDMetrics() {
 	go func() {
 		uuid, err := generateHardwareUUID()
 		if err != nil {
 			log.Printf("Failed to generate hardware UUID: %v", err)
 			return
+		}
+
+		storedUUID, err := registryutil.ReadUUIDFromRegistry()
+		if err != nil {
+			log.Printf("No existing UUID found in registry or read error: %v", err)
 		}
 
 		SystemUUID.With(prometheus.Labels{
