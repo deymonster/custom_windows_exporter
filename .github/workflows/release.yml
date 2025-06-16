@@ -34,7 +34,6 @@ jobs:
       # Generate certs
       - name: Generate certificates
         run: |
-          mkdir -p configs/certs
           go run ./tools/generate_cert.go
 
       # Setup InnoSetup

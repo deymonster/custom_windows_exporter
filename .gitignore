@@ -22,8 +22,9 @@ service.log
 *.tmp
 *.temp
 
-# Сертификат приватный
+# Сертификат приватный и публичный
 configs/certs/key.pem
+configs/cerst/cert.pem
 
 # Mac os files
 .DS_Store
