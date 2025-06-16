@@ -33,7 +33,7 @@ Filename: "sc"; Parameters: "start NITRINOnetControlManager"; Flags: runhidden
 ; Настройка правила брандмауэра
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""NITRINOnet Control Manager Port 9182"" protocol=TCP dir=in localport=9182 action=allow"; Flags: runhidden
 ; Настройка правила брандмауэра для API
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=\"NITRINOnet Control Manager API Port 9183\" protocol=TCP dir=in localport=9183 action=allow"; Flags: runhidden
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""NITRINOnet Control Manager API Port 9183"" protocol=TCP dir=in localport=9183 action=allow"; Flags: runhidden
 
 [UninstallRun]
 ; Удаляем службу
@@ -41,7 +41,7 @@ Filename: "sc"; Parameters: "stop NITRINOnetControlManager"; Flags: runhidden
 Filename: "sc"; Parameters: "delete NITRINOnetControlManager"; Flags: runhidden
 ; Удаление правила брандмауэра
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""NITRINOnet Control Manager Port 9182"""; Flags: runhidden
-Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=\"NITRINOnet Control Manager API Port 9183\""; Flags: runhidden
+Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""NITRINOnet Control Manager API Port 9183"""; Flags: runhidden
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\EventLog\Application\NITRINOnetControlManager"; ValueType: string; ValueName: "EventMessageFile"; ValueData: "{app}\NITRINOnetControlManager.exe"; Flags: uninsdeletevalue
