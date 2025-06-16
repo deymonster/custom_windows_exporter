@@ -7,10 +7,10 @@ import (
 	"log"
 	"strings"
 
+	"node_exporter_custom/registryutil"
+
 	"github.com/StackExchange/wmi"
 	"github.com/prometheus/client_golang/prometheus"
-	"node_exporter_custom/registryutil"
-	
 )
 
 // Структуры для хранения информации о системе и операционной системе
@@ -140,7 +140,6 @@ func generateHardwareUUID() (string, error) {
 
 }
 
-
 // RecordUUIDMetrics runs in a separate goroutine and records the unique hardware
 // UUID of the system into a Prometheus metric. It generates the UUID by collecting
 // various hardware and system information, and updates the metric with the UUID.
@@ -148,19 +147,54 @@ func generateHardwareUUID() (string, error) {
 
 func RecordUUIDMetrics() {
 	go func() {
-		uuid, err := generateHardwareUUID()
+		currentUUID, err := generateHardwareUUID()
 		if err != nil {
 			log.Printf("Failed to generate hardware UUID: %v", err)
 			return
 		}
 
-		storedUUID, err := registryutil.ReadUUIDFromRegistry()
+		// Проверяем существование ключа
+		exists, err := registryutil.KeyExists()
 		if err != nil {
-			log.Printf("No existing UUID found in registry or read error: %v", err)
+			log.Printf("Error checking registry key: %v", err)
+			return
 		}
 
+		if !exists {
+			// Создаем ключ если не существует
+			if err := registryutil.CreateKey(); err != nil {
+				log.Printf("Failed to create registry key: %v", err)
+				return
+			}
+
+			// Записываем UUID в реестр
+			if err := registryutil.WriteUUIDToRegistry(currentUUID); err != nil {
+				log.Printf("Failed to write initial UUID to registry: %v", err)
+				return
+			}
+			log.Println("Created new registry key and stored initial UUID")
+			HardwareUUIDChanged.Set(0)
+		} else {
+			// Сравниваем с сохраненным UUID
+			storedUUID, err := registryutil.ReadUUIDFromRegistry()
+			if err != nil {
+				log.Printf("Failed to read UUID from registry: %v", err)
+				HardwareUUIDChanged.Set(0)
+				return
+			}
+
+			if storedUUID != currentUUID {
+
+				// Устанавливаем флаг изменения
+				HardwareUUIDChanged.Set(1)
+				log.Printf("Hardware UUID changed! Old: %s, New: %s", storedUUID, currentUUID)
+			} else {
+				HardwareUUIDChanged.Set(0)
+			}
+		}
+		// Записываем UUID в метрику
 		SystemUUID.With(prometheus.Labels{
-			"uuid": uuid,
+			"uuid": currentUUID,
 		}).Set(1)
 
 	}()

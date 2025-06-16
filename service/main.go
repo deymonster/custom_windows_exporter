@@ -222,6 +222,7 @@ func initMetrics() {
 	metrics.RecordSystemMetrics()
 
 	prometheus.MustRegister(metrics.SystemUUID)
+	prometheus.MustRegister(metrics.HardwareUUIDChanged)
 	metrics.RecordUUIDMetrics()
 
 	prometheus.MustRegister(metrics.SerialNumberMetric)
