@@ -24,3 +24,6 @@ service.log
 
 # Сертификат приватный
 configs/certs/key.pem
+
+# Mac os files
+.DS_Store

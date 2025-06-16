@@ -154,56 +154,15 @@ func startHTTPServer(stopChan chan struct{}) {
 
 	// сервер api
 	apiMux := http.NewServeMux()
-	apiMux.HandleFunc("/api/update-uuid", func(w http.ResponseWriter, r *http.Request) {
-		// 1. Проверка Basic Auth
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
-			http.Error(w, "Authorization required", http.StatusUnauthorized)
-			return
-		}
 
-		// 2. Декодирование Basic Auth
-		payload, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
-		if err != nil {
-			http.Error(w, "Invalid auth header", http.StatusBadRequest)
-			return
-		}
+	// Создаем экземпляр обработчика
+	uuidHandler := &api.UUIDHandler{}
 
-		pair := strings.SplitN(string(payload), ":", 2)
-		if len(pair) != 2 {
-			http.Error(w, "Invalid credentials format", http.StatusBadRequest)
-			return
-		}
+	// Оборачиваем обработчики в middleware
+	updateUUIDHandler := api.AuthMiddleware(http.HandlerFunc(uuidHandler.UpdateUUID))
 
-		// 3. Проверка UUID (логина)
-		currentUUID, err := api.GetCurrentUUID() // Новая функция в metrics
-		if err != nil || pair[0] != currentUUID {
-			http.Error(w, "Invalid UUID", http.StatusForbidden)
-			return
-		}
-
-		// 4. Проверка пароля (просто по хэшу)
-		if !auth.IsValid(pair[1]) { // Простая проверка хэша
-			http.Error(w, "Invalid password", http.StatusForbidden)
-			return
-		}
-
-		// 5. Логика обновления UUID
-		newUUID, err := metrics.GenerateHardwareUUID()
-		if err != nil {
-			http.Error(w, "UUID generation failed", http.StatusInternalServerError)
-			return
-		}
-
-		if err := registryutil.WriteUUIDToRegistry(newUUID); err != nil {
-			http.Error(w, "Failed to save UUID", http.StatusInternalServerError)
-			return
-		}
-
-		metrics.HardwareUUIDChanged.Set(0)
-		w.Write([]byte("UUID updated successfully"))
-	})
+	// Регистрируем обработчики в apiMux
+	apiMux.Handle("/api/update-uuid", updateUUIDHandler)
 
 	// Запуск серверов
 	//server := &http.Server{Addr: ":9182"}
@@ -211,8 +170,19 @@ func startHTTPServer(stopChan chan struct{}) {
 	apiServer := &http.Server{Addr: ":9183", Handler: apiMux}
 
 	go func() {
+		log.Println("Starting metrics server on :9182")
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Metrics server error: %v", err)
+		}
+	}()
+
+	go func() {
 		log.Println("Starting API server on :9183")
-		certPath := filepath.Join(os.Getenv("ProgramData"), "NITRINOnetControlManager", "certs")
+		certPath := "configs/certs"
+		if _, err := os.Stat(certPath); os.IsNotExist(err) {
+			// Если директория не существует, попробуем использовать ProgramData
+			certPath = filepath.Join(os.Getenv("ProgramData"), "NITRINOnetControlManager", "certs")
+		}
 		if err := apiServer.ListenAndServeTLS(
 			filepath.Join(certPath, "cert.pem"),
 			filepath.Join(certPath, "key.pem"),
