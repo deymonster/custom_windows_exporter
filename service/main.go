@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -25,8 +23,6 @@ import (
 	"node_exporter_custom/watcher"
 
 	"node_exporter_custom/internal/api"
-	"node_exporter_custom/internal/auth"
-	"node_exporter_custom/registryutil"
 )
 
 const secretkey = "VERY_SECRET_KEY"
