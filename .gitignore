@@ -21,3 +21,6 @@ service.log
 # Другие файлы временного назначения
 *.tmp
 *.temp
+
+# Сертификат приватный
+configs/certs/key.pem

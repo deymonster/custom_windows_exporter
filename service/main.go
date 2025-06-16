@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,6 +23,10 @@ import (
 	"node_exporter_custom/logmanager"
 	"node_exporter_custom/metrics"
 	"node_exporter_custom/watcher"
+
+	"node_exporter_custom/internal/api"
+	"node_exporter_custom/internal/auth"
+	"node_exporter_custom/registryutil"
 )
 
 const secretkey = "VERY_SECRET_KEY"
@@ -123,6 +130,7 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 func startHTTPServer(stopChan chan struct{}) {
 
 	initMetrics()
+	// сервер с метриками
 	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		handshakeKey := r.Header.Get("X-Agent-Handshake-Key")
 		if handshakeKey != secretkey {
@@ -144,28 +152,85 @@ func startHTTPServer(stopChan chan struct{}) {
 		promhttp.Handler().ServeHTTP(w, r)
 	})
 
-	server := &http.Server{Addr: ":9182"}
+	// сервер api
+	apiMux := http.NewServeMux()
+	apiMux.HandleFunc("/api/update-uuid", func(w http.ResponseWriter, r *http.Request) {
+		// 1. Проверка Basic Auth
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "Authorization required", http.StatusUnauthorized)
+			return
+		}
+
+		// 2. Декодирование Basic Auth
+		payload, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
+		if err != nil {
+			http.Error(w, "Invalid auth header", http.StatusBadRequest)
+			return
+		}
+
+		pair := strings.SplitN(string(payload), ":", 2)
+		if len(pair) != 2 {
+			http.Error(w, "Invalid credentials format", http.StatusBadRequest)
+			return
+		}
+
+		// 3. Проверка UUID (логина)
+		currentUUID, err := api.GetCurrentUUID() // Новая функция в metrics
+		if err != nil || pair[0] != currentUUID {
+			http.Error(w, "Invalid UUID", http.StatusForbidden)
+			return
+		}
+
+		// 4. Проверка пароля (просто по хэшу)
+		if !auth.IsValid(pair[1]) { // Простая проверка хэша
+			http.Error(w, "Invalid password", http.StatusForbidden)
+			return
+		}
+
+		// 5. Логика обновления UUID
+		newUUID, err := metrics.GenerateHardwareUUID()
+		if err != nil {
+			http.Error(w, "UUID generation failed", http.StatusInternalServerError)
+			return
+		}
+
+		if err := registryutil.WriteUUIDToRegistry(newUUID); err != nil {
+			http.Error(w, "Failed to save UUID", http.StatusInternalServerError)
+			return
+		}
+
+		metrics.HardwareUUIDChanged.Set(0)
+		w.Write([]byte("UUID updated successfully"))
+	})
+
+	// Запуск серверов
+	//server := &http.Server{Addr: ":9182"}
+	metricsServer := &http.Server{Addr: ":9182", Handler: nil} // Default handler
+	apiServer := &http.Server{Addr: ":9183", Handler: apiMux}
 
 	go func() {
-		<-stopChan
-		log.Println("Shutting down HTTP server...")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down HTTP server: %v", err)
-			logmanager.WriteLog(fmt.Sprintf("Error shutting down HTTP server: %v", err))
+		log.Println("Starting API server on :9183")
+		certPath := filepath.Join(os.Getenv("ProgramData"), "NITRINOnetControlManager", "certs")
+		if err := apiServer.ListenAndServeTLS(
+			filepath.Join(certPath, "cert.pem"),
+			filepath.Join(certPath, "key.pem"),
+		); err != nil && err != http.ErrServerClosed {
+			log.Printf("API server error: %v", err)
 		}
 	}()
 
-	if wlog != nil {
-		wlog.Info(1, "Service listening on port 9182")
-		logmanager.WriteLog("Service listening on port 9182")
+	// Обработка остановки
+	<-stopChan
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := metricsServer.Shutdown(ctx); err != nil {
+		log.Printf("Metrics server shutdown error: %v", err)
 	}
-	log.Println("Listening on :9182")
-	logmanager.WriteLog("Listening on :9182")
-	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Printf("HTTP server closed with error: %v", err)
-		logmanager.WriteLog(fmt.Sprintf("HTTP server closed with error: %v", err))
+	if err := apiServer.Shutdown(ctx); err != nil {
+		log.Printf("API server shutdown error: %v", err)
 	}
 
 }

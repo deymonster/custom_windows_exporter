@@ -48,7 +48,7 @@ var (
 // formats the hash into a UUID-like string. If any information retrieval fails,
 // it returns an error.
 
-func generateHardwareUUID() (string, error) {
+func GenerateHardwareUUID() (string, error) {
 	var sb strings.Builder
 
 	// 1. Получаем информацию о BIOS
@@ -147,7 +147,7 @@ func generateHardwareUUID() (string, error) {
 
 func RecordUUIDMetrics() {
 	go func() {
-		currentUUID, err := generateHardwareUUID()
+		currentUUID, err := GenerateHardwareUUID()
 		if err != nil {
 			log.Printf("Failed to generate hardware UUID: %v", err)
 			return
