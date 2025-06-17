@@ -1,0 +1,11 @@
+{
+    "enabled": true,
+    "uuid_changed": true,
+    "cpu_load": 95,
+    "cpu_temperature": 95,
+    "disk_free_percent": 95,
+    "memory_free_percent": 95,
+    "network_errors": 95,
+    "disk_read_bytes_per_sec": 5000000,
+    "disk_write_bytes_per_sec": 3000000
+}

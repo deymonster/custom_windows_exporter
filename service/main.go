@@ -204,60 +204,80 @@ func startHTTPServer(stopChan chan struct{}) {
 func initMetrics() {
 	log.Println("Initializing metrics...")
 	logmanager.WriteLog("Initializing metrics...")
-	prometheus.MustRegister(metrics.BiosInfo)
-	metrics.RecordBiosInfo()
 
-	prometheus.MustRegister(metrics.ProccessCount)
-	prometheus.MustRegister(metrics.ProccessMemoryUsage)
-	prometheus.MustRegister(metrics.ProccessCPUUsage)
-	prometheus.MustRegister(metrics.ProcessInstanceCount)
-	prometheus.MustRegister(metrics.ProcessGroupMemoryWorkingSet)
-	prometheus.MustRegister(metrics.ProcessGroupMemoryPrivate)
-	prometheus.MustRegister(metrics.ProcessGroupCPUUsage)
-	metrics.RecordProccessInfo()
+	if metrics.IsMockEnabled() {
+		log.Println("Mock metrics enabled")
+		logmanager.WriteLog("Mock metrics enabled")
+		prometheus.MustRegister(
+			metrics.HardwareUUIDChanged,
+			metrics.CpuUsage,
+			metrics.CpuTemperature,
+			metrics.DiskUsage,
+			metrics.DiskUsagePercent,
+			metrics.DiskReadBytes,
+			metrics.DiskWriteBytes,
+			metrics.TotalMemory,
+			metrics.UsedMemory,
+			metrics.FreeMemory,
+			metrics.NetworkErrors,
+		)
+		metrics.ApplyMockMetrics()
+	} else {
+		prometheus.MustRegister(metrics.BiosInfo)
+		metrics.RecordBiosInfo()
 
-	prometheus.MustRegister(metrics.CpuUsage)
-	prometheus.MustRegister(metrics.CpuTemperature)
-	metrics.RecordCPUInfo()
+		prometheus.MustRegister(metrics.ProccessCount)
+		prometheus.MustRegister(metrics.ProccessMemoryUsage)
+		prometheus.MustRegister(metrics.ProccessCPUUsage)
+		prometheus.MustRegister(metrics.ProcessInstanceCount)
+		prometheus.MustRegister(metrics.ProcessGroupMemoryWorkingSet)
+		prometheus.MustRegister(metrics.ProcessGroupMemoryPrivate)
+		prometheus.MustRegister(metrics.ProcessGroupCPUUsage)
+		metrics.RecordProccessInfo()
 
-	prometheus.MustRegister(metrics.MemoryModuleInfo)
-	prometheus.MustRegister(metrics.TotalMemory)
-	prometheus.MustRegister(metrics.UsedMemory)
-	prometheus.MustRegister(metrics.FreeMemory)
-	metrics.RecordMemoryModuleInfo()
-	metrics.RecordMemoryUsage()
+		prometheus.MustRegister(metrics.CpuUsage)
+		prometheus.MustRegister(metrics.CpuTemperature)
+		metrics.RecordCPUInfo()
 
-	prometheus.MustRegister(metrics.DiskUsage)
-	prometheus.MustRegister(metrics.DiskUsagePercent)
-	prometheus.MustRegister(metrics.DiskReadBytes)
-	prometheus.MustRegister(metrics.DiskWriteBytes)
-	prometheus.MustRegister(metrics.DiskHealthStatus)
-	metrics.RecordDiskUsage()
+		prometheus.MustRegister(metrics.MemoryModuleInfo)
+		prometheus.MustRegister(metrics.TotalMemory)
+		prometheus.MustRegister(metrics.UsedMemory)
+		prometheus.MustRegister(metrics.FreeMemory)
+		metrics.RecordMemoryModuleInfo()
+		metrics.RecordMemoryUsage()
 
-	prometheus.MustRegister(metrics.NetworkStatus)
-	prometheus.MustRegister(metrics.NetworkRxBytesPerSecond)
-	prometheus.MustRegister(metrics.NetworkTxBytesPerSecond)
-	prometheus.MustRegister(metrics.NetworkErrors)
-	prometheus.MustRegister(metrics.NetworkDroppedPackets)
-	metrics.RecordNetworkMetrics()
+		prometheus.MustRegister(metrics.DiskUsage)
+		prometheus.MustRegister(metrics.DiskUsagePercent)
+		prometheus.MustRegister(metrics.DiskReadBytes)
+		prometheus.MustRegister(metrics.DiskWriteBytes)
+		prometheus.MustRegister(metrics.DiskHealthStatus)
+		metrics.RecordDiskUsage()
 
-	prometheus.MustRegister(metrics.GpuInfo)
-	prometheus.MustRegister(metrics.GpuMemory)
-	metrics.RecordGpuInfo()
+		prometheus.MustRegister(metrics.NetworkStatus)
+		prometheus.MustRegister(metrics.NetworkRxBytesPerSecond)
+		prometheus.MustRegister(metrics.NetworkTxBytesPerSecond)
+		prometheus.MustRegister(metrics.NetworkErrors)
+		prometheus.MustRegister(metrics.NetworkDroppedPackets)
+		metrics.RecordNetworkMetrics()
 
-	prometheus.MustRegister(metrics.MotherboardInfo)
-	metrics.RecordMotherboardInfo()
+		prometheus.MustRegister(metrics.GpuInfo)
+		prometheus.MustRegister(metrics.GpuMemory)
+		metrics.RecordGpuInfo()
 
-	prometheus.MustRegister(metrics.SystemInfo)
-	prometheus.MustRegister(metrics.SystemUptime)
-	metrics.RecordSystemMetrics()
+		prometheus.MustRegister(metrics.MotherboardInfo)
+		metrics.RecordMotherboardInfo()
 
-	prometheus.MustRegister(metrics.SystemUUID)
-	prometheus.MustRegister(metrics.HardwareUUIDChanged)
-	metrics.RecordUUIDMetrics()
+		prometheus.MustRegister(metrics.SystemInfo)
+		prometheus.MustRegister(metrics.SystemUptime)
+		metrics.RecordSystemMetrics()
 
-	prometheus.MustRegister(metrics.SerialNumberMetric)
-	metrics.RecordSNMetrics()
+		prometheus.MustRegister(metrics.SystemUUID)
+		prometheus.MustRegister(metrics.HardwareUUIDChanged)
+		metrics.RecordUUIDMetrics()
+
+		prometheus.MustRegister(metrics.SerialNumberMetric)
+		metrics.RecordSNMetrics()
+	}
 
 	log.Println("Metrics initialized")
 	logmanager.WriteLog("Metrics initialized")
@@ -349,6 +369,11 @@ func main() {
 		}
 	}()
 
+	if err := metrics.LoadMockConfig(); err != nil {
+		log.Fatalf("Failed to load mock config: %v", err)
+		logmanager.WriteLog(fmt.Sprintf("Failed to load mock config: %v", err))
+	}
+
 	deviceConfig, err := metrics.ReadDeviceConfig()
 	if err != nil {
 		log.Fatalf("Failed to read device config: %v", err)
@@ -358,6 +383,8 @@ func main() {
 
 	// Watch config file for changes in a separate goroutine
 	go watcher.WatchConfigFile(metrics.ConfigFilePath)
+	// Watch mock config file for changes in a separate goroutine
+	go metrics.WatchMockConfigFile()
 
 	isService, err := svc.IsWindowsService()
 	if err != nil {
