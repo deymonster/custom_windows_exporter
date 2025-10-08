@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -18,11 +20,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"node_exporter_custom/logmanager"
-	"node_exporter_custom/metrics"
-	"node_exporter_custom/watcher"
-
 	"node_exporter_custom/internal/api"
+	"node_exporter_custom/internal/collector"
+	"node_exporter_custom/logmanager"
 )
 
 const secretkey = "VERY_SECRET_KEY"
@@ -82,7 +82,26 @@ func setupEventLogger() {
 // }
 
 // myService - служба
-type myService struct{}
+type myService struct {
+	collector collector.Interface
+	stopMu    sync.Mutex
+	stopChan  chan struct{}
+}
+
+func (m *myService) setStopChan(ch chan struct{}) {
+	m.stopMu.Lock()
+	m.stopChan = ch
+	m.stopMu.Unlock()
+}
+
+func (m *myService) Stop() {
+	m.stopMu.Lock()
+	defer m.stopMu.Unlock()
+	if m.stopChan != nil {
+		close(m.stopChan)
+		m.stopChan = nil
+	}
+}
 
 func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
 	changes <- svc.Status{State: svc.StartPending}
@@ -94,7 +113,8 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 
 	stopChan := make(chan struct{})
-	go startHTTPServer(stopChan)
+	m.setStopChan(stopChan)
+	go startHTTPServer(stopChan, m.collector)
 
 	for {
 		select {
@@ -105,7 +125,7 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 					wlog.Info(1, "Service stopping")
 					logmanager.WriteLog("Service stopping")
 				}
-				close(stopChan)
+				m.Stop()
 				changes <- svc.Status{State: svc.StopPending}
 				return
 			default:
@@ -123,9 +143,29 @@ func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes
 	}
 }
 
-func startHTTPServer(stopChan chan struct{}) {
+func startHTTPServer(stopChan chan struct{}, coll collector.Interface) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	initMetrics()
+	if coll != nil {
+		log.Println("Initializing metrics...")
+		logmanager.WriteLog("Initializing metrics...")
+		if err := coll.RegisterMetrics(prometheus.DefaultRegisterer); err != nil {
+			log.Printf("Failed to register metrics: %v", err)
+			logmanager.WriteLog(fmt.Sprintf("Failed to register metrics: %v", err))
+		} else if err := coll.Start(ctx); err != nil {
+			log.Printf("Failed to start collector: %v", err)
+			logmanager.WriteLog(fmt.Sprintf("Failed to start collector: %v", err))
+		} else {
+			log.Println("Metrics initialized")
+			logmanager.WriteLog("Metrics initialized")
+		}
+	}
+
+	go func() {
+		<-stopChan
+		cancel()
+	}()
 	// сервер с метриками
 	http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		handshakeKey := r.Header.Get("X-Agent-Handshake-Key")
@@ -201,94 +241,12 @@ func startHTTPServer(stopChan chan struct{}) {
 
 }
 
-func initMetrics() {
-	log.Println("Initializing metrics...")
-	logmanager.WriteLog("Initializing metrics...")
-
-	if metrics.IsMockEnabled() {
-		log.Println("Mock metrics enabled")
-		logmanager.WriteLog("Mock metrics enabled")
-		prometheus.MustRegister(
-			metrics.HardwareUUIDChanged,
-			metrics.CpuUsage,
-			metrics.CpuTemperature,
-			metrics.DiskUsage,
-			metrics.DiskUsagePercent,
-			metrics.DiskReadBytes,
-			metrics.DiskWriteBytes,
-			metrics.TotalMemory,
-			metrics.UsedMemory,
-			metrics.FreeMemory,
-			metrics.NetworkErrors,
-		)
-		metrics.ApplyMockMetrics()
-	} else {
-		prometheus.MustRegister(metrics.BiosInfo)
-		metrics.RecordBiosInfo()
-
-		prometheus.MustRegister(metrics.ProccessCount)
-		prometheus.MustRegister(metrics.ProccessMemoryUsage)
-		prometheus.MustRegister(metrics.ProccessCPUUsage)
-		prometheus.MustRegister(metrics.ProcessInstanceCount)
-		prometheus.MustRegister(metrics.ProcessGroupMemoryWorkingSet)
-		prometheus.MustRegister(metrics.ProcessGroupMemoryPrivate)
-		prometheus.MustRegister(metrics.ProcessGroupCPUUsage)
-		metrics.RecordProccessInfo()
-
-		prometheus.MustRegister(metrics.CpuUsage)
-		prometheus.MustRegister(metrics.CpuTemperature)
-		metrics.RecordCPUInfo()
-
-		prometheus.MustRegister(metrics.MemoryModuleInfo)
-		prometheus.MustRegister(metrics.TotalMemory)
-		prometheus.MustRegister(metrics.UsedMemory)
-		prometheus.MustRegister(metrics.FreeMemory)
-		metrics.RecordMemoryModuleInfo()
-		metrics.RecordMemoryUsage()
-
-		prometheus.MustRegister(metrics.DiskUsage)
-		prometheus.MustRegister(metrics.DiskUsagePercent)
-		prometheus.MustRegister(metrics.DiskReadBytes)
-		prometheus.MustRegister(metrics.DiskWriteBytes)
-		prometheus.MustRegister(metrics.DiskHealthStatus)
-		metrics.RecordDiskUsage()
-
-		prometheus.MustRegister(metrics.NetworkStatus)
-		prometheus.MustRegister(metrics.NetworkRxBytesPerSecond)
-		prometheus.MustRegister(metrics.NetworkTxBytesPerSecond)
-		prometheus.MustRegister(metrics.NetworkErrors)
-		prometheus.MustRegister(metrics.NetworkDroppedPackets)
-		metrics.RecordNetworkMetrics()
-
-		prometheus.MustRegister(metrics.GpuInfo)
-		prometheus.MustRegister(metrics.GpuMemory)
-		metrics.RecordGpuInfo()
-
-		prometheus.MustRegister(metrics.MotherboardInfo)
-		metrics.RecordMotherboardInfo()
-
-		prometheus.MustRegister(metrics.SystemInfo)
-		prometheus.MustRegister(metrics.SystemUptime)
-		metrics.RecordSystemMetrics()
-
-		prometheus.MustRegister(metrics.SystemUUID)
-		prometheus.MustRegister(metrics.HardwareUUIDChanged)
-		metrics.RecordUUIDMetrics()
-
-		prometheus.MustRegister(metrics.SerialNumberMetric)
-		metrics.RecordSNMetrics()
-	}
-
-	log.Println("Metrics initialized")
-	logmanager.WriteLog("Metrics initialized")
-}
-
-func runService(name string, isService bool) {
+func runService(name string, isService bool, handler *myService) {
 	if !isService {
 		// Интерактивный режим
 		log.Println("Running in interactive mode.")
 		logmanager.WriteLog("Running in interactive mode.")
-		err := debug.Run(name, &myService{})
+		err := debug.Run(name, handler)
 		if err != nil {
 			log.Fatalln("Error running service in debug mode.", err)
 			logmanager.WriteLog(fmt.Sprintf("Error running service in debug mode: %v", err))
@@ -297,7 +255,7 @@ func runService(name string, isService bool) {
 		// Службный режим
 		log.Println("Running in service  mode.")
 		logmanager.WriteLog("Running in service  mode.")
-		err := svc.Run(name, &myService{})
+		err := svc.Run(name, handler)
 		if err != nil {
 			log.Fatalln("Error running service in Service Control mode.", err)
 			logmanager.WriteLog(fmt.Sprintf("Error running service in Service Control mode: %v", err))
@@ -369,22 +327,13 @@ func main() {
 		}
 	}()
 
-	if err := metrics.LoadMockConfig(); err != nil {
-		log.Fatalf("Failed to load mock config: %v", err)
-		logmanager.WriteLog(fmt.Sprintf("Failed to load mock config: %v", err))
-	}
-
-	deviceConfig, err := metrics.ReadDeviceConfig()
+	collectorImpl, err := collector.New(runtime.GOOS)
 	if err != nil {
-		log.Fatalf("Failed to read device config: %v", err)
-		logmanager.WriteLog(fmt.Sprintf("Failed to read device config: %v", err))
+		logmanager.WriteLog(fmt.Sprintf("Failed to initialize collector for %s: %v", runtime.GOOS, err))
+		log.Fatalf("Failed to initialize collector for %s: %v", runtime.GOOS, err)
 	}
-	metrics.UpdateSerialNumberMetrics(deviceConfig)
 
-	// Watch config file for changes in a separate goroutine
-	go watcher.WatchConfigFile(metrics.ConfigFilePath)
-	// Watch mock config file for changes in a separate goroutine
-	go metrics.WatchMockConfigFile()
+	serviceHandler := &myService{collector: collectorImpl}
 
 	isService, err := svc.IsWindowsService()
 	if err != nil {
@@ -399,8 +348,7 @@ func main() {
 		log.Println("Running in interactive mode.")
 		fmt.Printf("Starting service in interactive mode...\n")
 		logmanager.WriteLog("Starting service in interactive mode...")
-		stopChan := make(chan struct{})
-		go runService("NITRINOnetControlManager", false)
+		go runService("NITRINOnetControlManager", false, serviceHandler)
 
 		signalChan := make(chan os.Signal, 1)
 		signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
@@ -410,7 +358,7 @@ func main() {
 		log.Println("Shutting down...")
 		logmanager.WriteLog("Shutting down...")
 
-		close(stopChan)
+		serviceHandler.Stop()
 
 		time.Sleep(5 * time.Second)
 
@@ -420,7 +368,7 @@ func main() {
 	} else {
 		log.Println("Running as service.")
 		logmanager.WriteLog("Running as service.")
-		runService("NITRINOnetControlManager", true)
+		runService("NITRINOnetControlManager", true, serviceHandler)
 
 	}
 

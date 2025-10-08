@@ -1,39 +1,36 @@
-package watcher
+package deviceconfig
 
 import (
+	"context"
 	"log"
-	"node_exporter_custom/metrics"
 
 	"github.com/fsnotify/fsnotify"
 )
 
-func WatchConfigFile(configFilePath string) {
+func Watch(ctx context.Context, path string, onChange func(*Config)) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatalf("Failed to create watcher: %v", err)
+		return err
 	}
-	defer watcher.Close()
-
-	done := make(chan bool)
 
 	go func() {
+		defer watcher.Close()
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case event, ok := <-watcher.Events:
 				if !ok {
 					return
 				}
-
 				if event.Op&fsnotify.Write == fsnotify.Write {
-					log.Println("Config file changed, reloading...")
-					deviceConfig, err := metrics.ReadDeviceConfig()
+					config, err := Read(path)
 					if err != nil {
 						log.Printf("Error reading device config: %v", err)
-					} else {
-						metrics.UpdateSerialNumberMetrics(deviceConfig)
+						continue
 					}
+					onChange(config)
 				}
-
 			case err, ok := <-watcher.Errors:
 				if !ok {
 					return
@@ -43,10 +40,10 @@ func WatchConfigFile(configFilePath string) {
 		}
 	}()
 
-	err = watcher.Add(configFilePath)
-	if err != nil {
-		log.Fatalf("Failed to watch config file: %v", err)
+	if err := watcher.Add(path); err != nil {
+		watcher.Close()
+		return err
 	}
 
-	<-done
+	return nil
 }
