@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package collector
 
@@ -15,5 +15,5 @@ func (noopCollector) RegisterMetrics(reg prometheus.Registerer) error { return n
 func (noopCollector) Start(ctx context.Context) error                 { <-ctx.Done(); return nil }
 
 func newForOS(os string) (Interface, error) {
-	return noopCollector{}, fmt.Errorf("collector not implemented for %s", os)
+        return noopCollector{}, fmt.Errorf("collector not implemented for %s", os)
 }
