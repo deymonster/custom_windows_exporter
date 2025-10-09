@@ -16,26 +16,98 @@ const LogFilePath = `C:\ProgramData\NITRINOnetControlManager\service.log`
 // For testing
 //const LogFilePath = `service_test.log`
 
-func SetupLogging() (io.Closer, error) {
-	writer, err := newRotatingFileWriter(LogFilePath, 50*1024*1024, 5)
-	if err != nil {
-		return nil, err
+// Options control how the logger is configured.
+type Options struct {
+	EnableStdout bool
+	EnableFile   bool
+	FilePath     string
+	MaxSize      int64
+	MaxBackups   int
+	LoggerFlags  int
+}
+
+// DefaultOptions returns the default logging configuration used by the service.
+func DefaultOptions() Options {
+	return Options{
+		EnableStdout: true,
+		EnableFile:   true,
+		FilePath:     LogFilePath,
+		MaxSize:      50 * 1024 * 1024,
+		MaxBackups:   5,
+		LoggerFlags:  log.LstdFlags,
+	}
+}
+
+// Manager wraps a configured logger and tracks any resources that need to be closed.
+type Manager struct {
+	logger  *log.Logger
+	closers []io.Closer
+	mu      sync.Mutex
+}
+
+// New creates a logging manager based on the provided options. The returned manager
+// sets the global logger to share the same output and must be closed when the
+// service shuts down.
+func New(opts Options) (*Manager, error) {
+	if opts.LoggerFlags == 0 {
+		opts.LoggerFlags = log.LstdFlags
 	}
 
-	multiWriter := io.MultiWriter(os.Stdout, writer)
+	var writers []io.Writer
+	var closers []io.Closer
+
+	if opts.EnableStdout {
+		writers = append(writers, os.Stdout)
+	}
+
+	if opts.EnableFile && opts.FilePath != "" {
+		writer, err := newRotatingFileWriter(opts.FilePath, opts.MaxSize, opts.MaxBackups)
+		if err != nil {
+			return nil, err
+		}
+		writers = append(writers, writer)
+		closers = append(closers, writer)
+	}
+
+	if len(writers) == 0 {
+		writers = append(writers, io.Discard)
+	}
+
+	multiWriter := io.MultiWriter(writers...)
 	log.SetOutput(multiWriter)
+	log.SetFlags(opts.LoggerFlags)
 
-	return writer, nil
+	logger := log.New(multiWriter, "", opts.LoggerFlags)
+
+	return &Manager{logger: logger, closers: closers}, nil
 }
 
-func WriteLog(message string) {
-	log.Println(message)
-}
-
-func CloseLog(logCloser io.Closer) {
-	if logCloser != nil {
-		logCloser.Close()
+// Logger returns the configured logger instance.
+func (m *Manager) Logger() *log.Logger {
+	if m == nil {
+		return log.Default()
 	}
+	return m.logger
+}
+
+// Close releases any resources held by the manager (for example, file handles).
+func (m *Manager) Close() error {
+	if m == nil {
+		return nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var firstErr error
+	for _, closer := range m.closers {
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+
+	m.closers = nil
+	return firstErr
 }
 
 type rotatingFileWriter struct {

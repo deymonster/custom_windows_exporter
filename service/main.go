@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -28,6 +29,111 @@ import (
 const secretkey = "VERY_SECRET_KEY"
 
 var wlog *eventlog.Log
+
+const (
+	eventIDInfo    = 1
+	eventIDWarning = 2
+	eventIDError   = 3
+)
+
+type eventLogger interface {
+	Info(eventID uint32, msg string) error
+	Warning(eventID uint32, msg string) error
+	Error(eventID uint32, msg string) error
+}
+
+type serviceLogger struct {
+	logger *log.Logger
+	event  eventLogger
+}
+
+func newServiceLogger(base *log.Logger, event eventLogger) *serviceLogger {
+	return &serviceLogger{logger: base, event: event}
+}
+
+func (l *serviceLogger) Infof(format string, args ...interface{}) {
+	l.log(eventIDInfo, func(ev eventLogger, id uint32, msg string) error {
+		if ev == nil {
+			return nil
+		}
+		return ev.Info(id, msg)
+	}, format, args...)
+}
+
+func (l *serviceLogger) Warnf(format string, args ...interface{}) {
+	l.log(eventIDWarning, func(ev eventLogger, id uint32, msg string) error {
+		if ev == nil {
+			return nil
+		}
+		return ev.Warning(id, msg)
+	}, format, args...)
+}
+
+func (l *serviceLogger) Errorf(format string, args ...interface{}) {
+	l.log(eventIDError, func(ev eventLogger, id uint32, msg string) error {
+		if ev == nil {
+			return nil
+		}
+		return ev.Error(id, msg)
+	}, format, args...)
+}
+
+func (l *serviceLogger) Printf(format string, args ...interface{}) {
+	if l == nil || l.logger == nil {
+		return
+	}
+	if len(args) > 0 {
+		l.logger.Printf(format, args...)
+	} else {
+		l.logger.Println(format)
+	}
+}
+
+func (l *serviceLogger) log(eventID uint32, eventFn func(eventLogger, uint32, string) error, format string, args ...interface{}) {
+	if l == nil || l.logger == nil {
+		return
+	}
+
+	msg := format
+	if len(args) > 0 {
+		msg = fmt.Sprintf(format, args...)
+	}
+	l.logger.Println(msg)
+
+	if l.event != nil && eventFn != nil {
+		if err := eventFn(l.event, eventID, msg); err != nil {
+			l.logger.Printf("failed to write to event log: %v", err)
+		}
+	}
+}
+
+func parseBoolEnv(value string) (bool, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false, false
+	}
+
+	switch strings.ToLower(trimmed) {
+	case "1", "true", "yes", "on":
+		return true, true
+	case "0", "false", "no", "off":
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+func shouldEnableFileLogging() bool {
+	if enabledValue, ok := parseBoolEnv(os.Getenv("NCM_ENABLE_FILE_LOG")); ok {
+		return enabledValue
+	}
+
+	if disabledValue, ok := parseBoolEnv(os.Getenv("NCM_DISABLE_FILE_LOG")); ok {
+		return !disabledValue
+	}
+
+	return true
+}
 
 // Install event source
 
@@ -84,6 +190,7 @@ func setupEventLogger() {
 // myService - служба
 type myService struct {
 	collector collector.Interface
+	logger    *serviceLogger
 	stopMu    sync.Mutex
 	stopChan  chan struct{}
 }
@@ -106,59 +213,59 @@ func (m *myService) Stop() {
 func (m *myService) Execute(args []string, req <-chan svc.ChangeRequest, changes chan<- svc.Status) (svcSpecificEC bool, exitCode uint32) {
 	changes <- svc.Status{State: svc.StartPending}
 
-	if wlog != nil {
-		wlog.Info(1, "Service started successfully")
-		logmanager.WriteLog("Service started successfully")
+	if m.logger != nil {
+		m.logger.Infof("Service started successfully")
 	}
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 
 	stopChan := make(chan struct{})
 	m.setStopChan(stopChan)
-	go startHTTPServer(stopChan, m.collector)
+	go startHTTPServer(stopChan, m.collector, m.logger)
 
 	for {
 		select {
 		case c := <-req:
 			switch c.Cmd {
 			case svc.Stop, svc.Shutdown:
-				if wlog != nil {
-					wlog.Info(1, "Service stopping")
-					logmanager.WriteLog("Service stopping")
+				if m.logger != nil {
+					m.logger.Infof("Service stopping")
 				}
 				m.Stop()
 				changes <- svc.Status{State: svc.StopPending}
 				return
 			default:
-				if wlog != nil {
-					wlog.Warning(2, "Received unknown control request")
-					logmanager.WriteLog("Received unknown control request")
+				if m.logger != nil {
+					m.logger.Warnf("Received unknown control request")
 				}
 			}
 		case <-time.After(10 * time.Second):
-			if wlog != nil {
-				wlog.Info(1, "Service running")
-				logmanager.WriteLog("Service running")
+			if m.logger != nil {
+				m.logger.Infof("Service running")
 			}
 		}
 	}
 }
 
-func startHTTPServer(stopChan chan struct{}, coll collector.Interface) {
+func startHTTPServer(stopChan chan struct{}, coll collector.Interface, logger *serviceLogger) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	if coll != nil {
-		log.Println("Initializing metrics...")
-		logmanager.WriteLog("Initializing metrics...")
+		if logger != nil {
+			logger.Infof("Initializing metrics...")
+		}
 		if err := coll.RegisterMetrics(prometheus.DefaultRegisterer); err != nil {
-			log.Printf("Failed to register metrics: %v", err)
-			logmanager.WriteLog(fmt.Sprintf("Failed to register metrics: %v", err))
+			if logger != nil {
+				logger.Errorf("Failed to register metrics: %v", err)
+			}
 		} else if err := coll.Start(ctx); err != nil {
-			log.Printf("Failed to start collector: %v", err)
-			logmanager.WriteLog(fmt.Sprintf("Failed to start collector: %v", err))
+			if logger != nil {
+				logger.Errorf("Failed to start collector: %v", err)
+			}
 		} else {
-			log.Println("Metrics initialized")
-			logmanager.WriteLog("Metrics initialized")
+			if logger != nil {
+				logger.Infof("Metrics initialized")
+			}
 		}
 	}
 
@@ -171,20 +278,15 @@ func startHTTPServer(stopChan chan struct{}, coll collector.Interface) {
 		handshakeKey := r.Header.Get("X-Agent-Handshake-Key")
 		if handshakeKey != secretkey {
 			clientIP := r.RemoteAddr
-			log.Printf("Unauthorized request from IP: %s", clientIP)
-			logmanager.WriteLog(fmt.Sprintf("Unauthorized request from IP: %s", clientIP))
-			if wlog != nil {
-				wlog.Warning(2, fmt.Sprintf("Unauthorized request from IP: %s", clientIP))
+			if logger != nil {
+				logger.Warnf("Unauthorized request from IP: %s", clientIP)
 			}
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if wlog != nil {
-			wlog.Info(1, fmt.Sprintf("Received authorized request from IP %s", r.RemoteAddr))
-			logmanager.WriteLog(fmt.Sprintf("Received authorized request from IP %s", r.RemoteAddr))
+		if logger != nil {
+			logger.Infof("Received authorized request from IP: %s", r.RemoteAddr)
 		}
-		log.Printf("Received authorized request from IP: %s", r.RemoteAddr)
-		logmanager.WriteLog(fmt.Sprintf("Received authorized request from IP: %s", r.RemoteAddr))
 		promhttp.Handler().ServeHTTP(w, r)
 	})
 
@@ -206,14 +308,20 @@ func startHTTPServer(stopChan chan struct{}, coll collector.Interface) {
 	apiServer := &http.Server{Addr: ":9183", Handler: apiMux}
 
 	go func() {
-		log.Println("Starting metrics server on :9182")
+		if logger != nil {
+			logger.Printf("Starting metrics server on :9182")
+		}
 		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Metrics server error: %v", err)
+			if logger != nil {
+				logger.Errorf("Metrics server error: %v", err)
+			}
 		}
 	}()
 
 	go func() {
-		log.Println("Starting API server on :9183")
+		if logger != nil {
+			logger.Printf("Starting API server on :9183")
+		}
 		certPath := "configs/certs"
 		if _, err := os.Stat(certPath); os.IsNotExist(err) {
 			// Если директория не существует, попробуем использовать ProgramData
@@ -223,7 +331,9 @@ func startHTTPServer(stopChan chan struct{}, coll collector.Interface) {
 			filepath.Join(certPath, "cert.pem"),
 			filepath.Join(certPath, "key.pem"),
 		); err != nil && err != http.ErrServerClosed {
-			log.Printf("API server error: %v", err)
+			if logger != nil {
+				logger.Errorf("API server error: %v", err)
+			}
 		}
 	}()
 
@@ -233,32 +343,42 @@ func startHTTPServer(stopChan chan struct{}, coll collector.Interface) {
 	defer shutdownCancel()
 
 	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Metrics server shutdown error: %v", err)
+		if logger != nil {
+			logger.Errorf("Metrics server shutdown error: %v", err)
+		}
 	}
 	if err := apiServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("API server shutdown error: %v", err)
+		if logger != nil {
+			logger.Errorf("API server shutdown error: %v", err)
+		}
 	}
 
 }
 
 func runService(name string, isService bool, handler *myService) {
+	logger := handler.logger
+
 	if !isService {
 		// Интерактивный режим
-		log.Println("Running in interactive mode.")
-		logmanager.WriteLog("Running in interactive mode.")
-		err := debug.Run(name, handler)
-		if err != nil {
-			log.Fatalln("Error running service in debug mode.", err)
-			logmanager.WriteLog(fmt.Sprintf("Error running service in debug mode: %v", err))
+		if logger != nil {
+			logger.Infof("Running in interactive mode.")
+		}
+		if err := debug.Run(name, handler); err != nil {
+			if logger != nil {
+				logger.Errorf("Error running service in debug mode: %v", err)
+			}
+			os.Exit(1)
 		}
 	} else {
 		// Службный режим
-		log.Println("Running in service  mode.")
-		logmanager.WriteLog("Running in service  mode.")
-		err := svc.Run(name, handler)
-		if err != nil {
-			log.Fatalln("Error running service in Service Control mode.", err)
-			logmanager.WriteLog(fmt.Sprintf("Error running service in Service Control mode: %v", err))
+		if logger != nil {
+			logger.Infof("Running in service  mode.")
+		}
+		if err := svc.Run(name, handler); err != nil {
+			if logger != nil {
+				logger.Errorf("Error running service in Service Control mode: %v", err)
+			}
+			os.Exit(1)
 		}
 	}
 }
@@ -312,12 +432,18 @@ func runService(name string, isService bool, handler *myService) {
 // }
 
 func main() {
+	logOptions := logmanager.DefaultOptions()
+	logOptions.EnableFile = shouldEnableFileLogging()
 
-	logCloser, err := logmanager.SetupLogging()
+	logMgr, err := logmanager.New(logOptions)
 	if err != nil {
 		log.Fatalf("Failed to setup logging: %v", err)
 	}
-	defer logmanager.CloseLog(logCloser)
+	defer func() {
+		if err := logMgr.Close(); err != nil {
+			log.Printf("Failed to close log manager: %v", err)
+		}
+	}()
 
 	installEventSource()
 	setupEventLogger()
@@ -327,27 +453,42 @@ func main() {
 		}
 	}()
 
-	collectorImpl, err := collector.New(runtime.GOOS)
-	if err != nil {
-		logmanager.WriteLog(fmt.Sprintf("Failed to initialize collector for %s: %v", runtime.GOOS, err))
-		log.Fatalf("Failed to initialize collector for %s: %v", runtime.GOOS, err)
+	svcLogger := newServiceLogger(logMgr.Logger(), wlog)
+	if !logOptions.EnableFile && svcLogger != nil {
+		svcLogger.Printf("File logging disabled; Windows Event Log and stdout/stderr will capture service output.")
 	}
 
-	serviceHandler := &myService{collector: collectorImpl}
+	collectorImpl, err := collector.New(runtime.GOOS)
+	if err != nil {
+		if svcLogger != nil {
+			svcLogger.Errorf("Failed to initialize collector for %s: %v", runtime.GOOS, err)
+		}
+		os.Exit(1)
+	}
+
+	serviceHandler := &myService{
+		collector: collectorImpl,
+		logger:    svcLogger,
+	}
 
 	isService, err := svc.IsWindowsService()
 	if err != nil {
-		log.Fatalf("Failed to check interactive session: %v", err)
-		logmanager.WriteLog(fmt.Sprintf("Failed to check interactive session: %v", err))
+		if svcLogger != nil {
+			svcLogger.Errorf("Failed to check interactive session: %v", err)
+		}
+		os.Exit(1)
 	}
 
-	log.Printf("Is isInteractive: %v", isService)
-	logmanager.WriteLog(fmt.Sprintf("Is isInteractive: %v", isService))
+	if svcLogger != nil {
+		svcLogger.Infof("Is isInteractive: %v", isService)
+	}
 
 	if !isService {
-		log.Println("Running in interactive mode.")
+		if svcLogger != nil {
+			svcLogger.Infof("Running in interactive mode.")
+			svcLogger.Printf("Starting service in interactive mode...")
+		}
 		fmt.Printf("Starting service in interactive mode...\n")
-		logmanager.WriteLog("Starting service in interactive mode...")
 		go runService("NITRINOnetControlManager", false, serviceHandler)
 
 		signalChan := make(chan os.Signal, 1)
@@ -355,19 +496,22 @@ func main() {
 
 		<-signalChan
 
-		log.Println("Shutting down...")
-		logmanager.WriteLog("Shutting down...")
+		if svcLogger != nil {
+			svcLogger.Infof("Shutting down...")
+		}
 
 		serviceHandler.Stop()
 
 		time.Sleep(5 * time.Second)
 
-		log.Println("Service stopped.")
-		logmanager.WriteLog("Service stopped.")
+		if svcLogger != nil {
+			svcLogger.Infof("Service stopped.")
+		}
 
 	} else {
-		log.Println("Running as service.")
-		logmanager.WriteLog("Running as service.")
+		if svcLogger != nil {
+			svcLogger.Infof("Running as service.")
+		}
 		runService("NITRINOnetControlManager", true, serviceHandler)
 
 	}
