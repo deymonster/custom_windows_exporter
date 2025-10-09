@@ -36,6 +36,7 @@ func (c *Collector) RegisterMetrics(reg prometheus.Registerer) error {
 		metrics.LogMockEnabled()
 		reg.MustRegister(
 			metrics.HardwareUUIDChanged,
+			metrics.SystemUUID,
 			metrics.CpuUsage,
 			metrics.CpuTemperature,
 			metrics.DiskUsage,
@@ -100,6 +101,8 @@ func (c *Collector) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to watch device config: %w", err)
 	}
 
+	metrics.RecordUUIDMetrics()
+
 	if c.mockEnabled {
 		go c.startMockLoop(ctx)
 		return nil
@@ -115,7 +118,6 @@ func (c *Collector) Start(ctx context.Context) error {
 	metrics.RecordGpuInfo()
 	metrics.RecordMotherboardInfo()
 	metrics.RecordSystemMetrics()
-	metrics.RecordUUIDMetrics()
 
 	return nil
 }

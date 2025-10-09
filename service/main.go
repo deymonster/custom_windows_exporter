@@ -313,11 +313,11 @@ func runService(name string, isService bool, handler *myService) {
 
 func main() {
 
-	logFile, err := logmanager.SetupLogging()
+	logCloser, err := logmanager.SetupLogging()
 	if err != nil {
 		log.Fatalf("Failed to setup logging: %v", err)
 	}
-	defer logmanager.CloseLog(logFile)
+	defer logmanager.CloseLog(logCloser)
 
 	installEventSource()
 	setupEventLogger()
