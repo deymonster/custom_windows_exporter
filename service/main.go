@@ -16,7 +16,6 @@ import (
 
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/debug"
-	"golang.org/x/sys/windows/svc/eventlog"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -28,54 +27,24 @@ import (
 
 const secretkey = "VERY_SECRET_KEY"
 
-var wlog *eventlog.Log
-
-const (
-	eventIDInfo    = 1
-	eventIDWarning = 2
-	eventIDError   = 3
-)
-
-type eventLogger interface {
-	Info(eventID uint32, msg string) error
-	Warning(eventID uint32, msg string) error
-	Error(eventID uint32, msg string) error
-}
-
 type serviceLogger struct {
 	logger *log.Logger
-	event  eventLogger
 }
 
-func newServiceLogger(base *log.Logger, event eventLogger) *serviceLogger {
-	return &serviceLogger{logger: base, event: event}
+func newServiceLogger(base *log.Logger) *serviceLogger {
+	return &serviceLogger{logger: base}
 }
 
 func (l *serviceLogger) Infof(format string, args ...interface{}) {
-	l.log(eventIDInfo, func(ev eventLogger, id uint32, msg string) error {
-		if ev == nil {
-			return nil
-		}
-		return ev.Info(id, msg)
-	}, format, args...)
+	l.log(format, args...)
 }
 
 func (l *serviceLogger) Warnf(format string, args ...interface{}) {
-	l.log(eventIDWarning, func(ev eventLogger, id uint32, msg string) error {
-		if ev == nil {
-			return nil
-		}
-		return ev.Warning(id, msg)
-	}, format, args...)
+	l.log(format, args...)
 }
 
 func (l *serviceLogger) Errorf(format string, args ...interface{}) {
-	l.log(eventIDError, func(ev eventLogger, id uint32, msg string) error {
-		if ev == nil {
-			return nil
-		}
-		return ev.Error(id, msg)
-	}, format, args...)
+	l.log(format, args...)
 }
 
 func (l *serviceLogger) Printf(format string, args ...interface{}) {
@@ -89,7 +58,7 @@ func (l *serviceLogger) Printf(format string, args ...interface{}) {
 	}
 }
 
-func (l *serviceLogger) log(eventID uint32, eventFn func(eventLogger, uint32, string) error, format string, args ...interface{}) {
+func (l *serviceLogger) log(format string, args ...interface{}) {
 	if l == nil || l.logger == nil {
 		return
 	}
@@ -99,12 +68,6 @@ func (l *serviceLogger) log(eventID uint32, eventFn func(eventLogger, uint32, st
 		msg = fmt.Sprintf(format, args...)
 	}
 	l.logger.Println(msg)
-
-	if l.event != nil && eventFn != nil {
-		if err := eventFn(l.event, eventID, msg); err != nil {
-			l.logger.Printf("failed to write to event log: %v", err)
-		}
-	}
 }
 
 func parseBoolEnv(value string) (bool, bool) {
@@ -133,40 +96,6 @@ func shouldEnableFileLogging() bool {
 	}
 
 	return true
-}
-
-// Install event source
-
-func installEventSource() {
-	err := eventlog.InstallAsEventCreate("NITRINOnetControlManager", eventlog.Error|eventlog.Warning|eventlog.Info)
-	if err != nil {
-		log.Printf("Failed to install logger: %v", err)
-	} else {
-		log.Println("Event source installed")
-	}
-}
-
-// func removeEventSource() {
-// 	err := eventlog.Remove("NITRINOnetControlManager")
-// 	if err != nil {
-// 		log.Printf("Failed to remove logger: %v", err)
-// 	} else {
-// 		log.Println("Event source removed")
-// 	}
-// }
-
-// Setup Event Log
-func setupEventLogger() {
-	var loggerName = "NITRINOnetControlManager"
-
-	var err error
-	wlog, err = eventlog.Open(loggerName)
-	if err != nil {
-		log.Fatalf("Could not open event log: %v", err)
-	} else {
-		log.Println("Event log opened")
-	}
-
 }
 
 // Setup logging to a file
@@ -445,17 +374,9 @@ func main() {
 		}
 	}()
 
-	installEventSource()
-	setupEventLogger()
-	defer func() {
-		if wlog != nil {
-			wlog.Close()
-		}
-	}()
-
-	svcLogger := newServiceLogger(logMgr.Logger(), wlog)
+	svcLogger := newServiceLogger(logMgr.Logger())
 	if !logOptions.EnableFile && svcLogger != nil {
-		svcLogger.Printf("File logging disabled; Windows Event Log and stdout/stderr will capture service output.")
+		svcLogger.Printf("File logging disabled; stdout/stderr will capture service output.")
 	}
 
 	collectorImpl, err := collector.New(runtime.GOOS)
