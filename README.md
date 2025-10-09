@@ -85,6 +85,14 @@ go mod tidy
 GOOS=linux GOARCH=amd64 go build -o bin/nitrinonetcmanager ./service
 ```
 
+> ℹ️ **В PowerShell** команды экспорта переменных отличаются: 
+> ```powershell
+> $env:GOOS = 'linux'
+> $env:GOARCH = 'amd64'
+> go build -o bin/nitrinonetcmanager ./service
+> ```
+> В `cmd.exe` используйте `set GOOS=linux` и `set GOARCH=amd64` перед вызовом `go build`.
+
 Более подробное руководство по развёртыванию, настройке переменных окружения и интеграции с systemd доступно в [docs/linux_build.md](docs/linux_build.md).
 
 ### Удаление службы

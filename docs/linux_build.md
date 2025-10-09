@@ -28,6 +28,14 @@
    ```bash
    GOOS=linux GOARCH=amd64 go build -o bin/nitrinonetcmanager ./service
    ```
+   > ⚠️ **PowerShell:** переменные окружения задаются через `$env:`. Выполните
+   >   ```powershell
+   >   $env:GOOS = 'linux'
+   >   $env:GOARCH = 'amd64'
+   >   go build -o bin/nitrinonetcmanager ./service
+   >   ```
+   >   В классическом `cmd.exe` используйте `set GOOS=linux` и `set GOARCH=amd64` перед запуском `go build`.
+
    При выполнении команды компилятор выберет `service/main_linux.go` и Linux-реализацию сборщика.
 3. (Опционально) Запустите модульные тесты под Linux:
    ```bash
