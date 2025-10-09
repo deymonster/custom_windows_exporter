@@ -229,13 +229,13 @@ func startHTTPServer(stopChan chan struct{}, coll collector.Interface) {
 
 	// Обработка остановки
 	<-stopChan
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
 
-	if err := metricsServer.Shutdown(ctx); err != nil {
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("Metrics server shutdown error: %v", err)
 	}
-	if err := apiServer.Shutdown(ctx); err != nil {
+	if err := apiServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("API server shutdown error: %v", err)
 	}
 
