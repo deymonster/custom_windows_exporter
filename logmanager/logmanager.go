@@ -10,12 +10,6 @@ import (
 	"sync"
 )
 
-// For production
-const LogFilePath = `C:\ProgramData\NITRINOnetControlManager\service.log`
-
-// For testing
-//const LogFilePath = `service_test.log`
-
 // Options control how the logger is configured.
 type Options struct {
 	EnableStdout bool
@@ -28,10 +22,15 @@ type Options struct {
 
 // DefaultOptions returns the default logging configuration used by the service.
 func DefaultOptions() Options {
+	filePath := os.Getenv("NCM_LOG_FILE")
+	if filePath == "" {
+		filePath = defaultLogFilePath()
+	}
+
 	return Options{
 		EnableStdout: true,
-		EnableFile:   true,
-		FilePath:     LogFilePath,
+		EnableFile:   filePath != "",
+		FilePath:     filePath,
 		MaxSize:      50 * 1024 * 1024,
 		MaxBackups:   5,
 		LoggerFlags:  log.LstdFlags,

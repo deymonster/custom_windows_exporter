@@ -5,11 +5,11 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 )
-
-const defaultConfigPath = `C:\\ProgramData\\NITRINOnetControlManager\\config.yml`
 
 type Config struct {
 	SerialNumber string `yaml:"serial_number"`
@@ -18,7 +18,11 @@ type Config struct {
 }
 
 func DefaultPath() string {
-	return defaultConfigPath
+	if override := strings.TrimSpace(os.Getenv("NCM_CONFIG_PATH")); override != "" {
+		return override
+	}
+
+	return defaultConfigPath()
 }
 
 func Read(path string) (*Config, error) {
@@ -49,6 +53,10 @@ func Read(path string) (*Config, error) {
 }
 
 func createDefaultConfigFile(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("failed to create config directory: %v", err)
+	}
+
 	defaultConfigContent := "serial_number: \"unknown\"\nlocation: \"unknown\"\ndevice_tag: \"unknown\""
 
 	if err := os.WriteFile(path, []byte(defaultConfigContent), 0o644); err != nil {

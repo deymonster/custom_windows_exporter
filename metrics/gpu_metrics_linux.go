@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,10 @@ func readSysfsValue(path string) string {
 }
 
 func discoverGPUNames() []string {
+	if names := parseLspciGPUs(); len(names) > 0 {
+		return names
+	}
+
 	entries, err := os.ReadDir("/sys/class/drm")
 	if err != nil {
 		return nil
@@ -44,13 +49,50 @@ func discoverGPUNames() []string {
 			driver = filepath.Base(link)
 		}
 
-		// Some kernels expose vendor/model as hex values (e.g. 0x10de)
-		identifier := fmt.Sprintf("%s:%s", vendor, model)
-		if vendor == "" && model == "" {
+		identifier := strings.TrimSpace(fmt.Sprintf("%s %s", vendor, model))
+		if identifier == "" {
 			identifier = name
 		}
 		if driver != "" {
 			identifier = fmt.Sprintf("%s (%s)", identifier, driver)
+		}
+
+		if _, ok := seen[identifier]; ok {
+			continue
+		}
+		seen[identifier] = struct{}{}
+		names = append(names, identifier)
+	}
+
+	return names
+}
+
+func parseLspciGPUs() []string {
+	cmd := exec.Command("lspci", "-mm", "-nn", "-d", "::0300")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil
+	}
+
+	var names []string
+	seen := make(map[string]struct{})
+
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		tokens := strings.Split(line, "\"")
+		if len(tokens) < 6 {
+			continue
+		}
+
+		vendor := strings.TrimSpace(tokens[3])
+		product := strings.TrimSpace(tokens[5])
+		identifier := strings.TrimSpace(fmt.Sprintf("%s %s", vendor, product))
+		if identifier == "" {
+			continue
 		}
 
 		if _, ok := seen[identifier]; ok {

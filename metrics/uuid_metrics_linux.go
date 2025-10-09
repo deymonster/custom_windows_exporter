@@ -131,40 +131,45 @@ func GenerateHardwareUUID() (string, error) {
 
 func RecordUUIDMetrics() {
 	go func() {
-		currentUUID, err := GenerateHardwareUUID()
-		if err != nil {
-			log.Printf("Failed to generate hardware UUID: %v", err)
-			return
+		if err := RefreshUUIDMetrics(); err != nil {
+			log.Printf("Failed to record UUID metrics: %v", err)
 		}
-
-		exists, err := registryutil.KeyExists()
-		if err != nil {
-			log.Printf("Error checking UUID persistence: %v", err)
-			return
-		}
-
-		if !exists {
-			if err := registryutil.CreateKey(); err != nil {
-				log.Printf("Failed to initialize UUID storage: %v", err)
-				return
-			}
-			if err := registryutil.WriteUUIDToRegistry(currentUUID); err != nil {
-				log.Printf("Failed to store hardware UUID: %v", err)
-				return
-			}
-			HardwareUUIDChanged.Set(0)
-		} else {
-			storedUUID, err := registryutil.ReadUUIDFromRegistry()
-			if err != nil {
-				log.Printf("Failed to read stored UUID: %v", err)
-			} else if storedUUID != currentUUID {
-				HardwareUUIDChanged.Set(1)
-				log.Printf("Hardware UUID changed! Old: %s, New: %s", storedUUID, currentUUID)
-			} else {
-				HardwareUUIDChanged.Set(0)
-			}
-		}
-
-		SystemUUID.With(prometheus.Labels{"uuid": currentUUID}).Set(1)
 	}()
+}
+
+func RefreshUUIDMetrics() error {
+	currentUUID, err := GenerateHardwareUUID()
+	if err != nil {
+		return fmt.Errorf("generate hardware UUID: %w", err)
+	}
+
+	exists, err := registryutil.KeyExists()
+	if err != nil {
+		return fmt.Errorf("check UUID persistence: %w", err)
+	}
+
+	if !exists {
+		if err := registryutil.CreateKey(); err != nil {
+			return fmt.Errorf("init UUID storage: %w", err)
+		}
+		if err := registryutil.WriteUUIDToRegistry(currentUUID); err != nil {
+			return fmt.Errorf("store hardware UUID: %w", err)
+		}
+		HardwareUUIDChanged.Set(0)
+	} else {
+		storedUUID, err := registryutil.ReadUUIDFromRegistry()
+		if err != nil {
+			return fmt.Errorf("read stored UUID: %w", err)
+		}
+		if storedUUID != currentUUID {
+			HardwareUUIDChanged.Set(1)
+			log.Printf("hardware UUID changed: old=%s new=%s", storedUUID, currentUUID)
+		} else {
+			HardwareUUIDChanged.Set(0)
+		}
+	}
+
+	SystemUUID.Reset()
+	SystemUUID.With(prometheus.Labels{"uuid": currentUUID}).Set(1)
+	return nil
 }
