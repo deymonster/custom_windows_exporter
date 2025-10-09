@@ -12,6 +12,7 @@ import (
 	"node_exporter_custom/registryutil"
 
 	"github.com/StackExchange/wmi"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Структуры для хранения информации о системе и операционной системе

@@ -13,14 +13,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-func readSysfsValue(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
 func discoverGPUNames() []string {
 	if names := parseLspciGPUs(); len(names) > 0 {
 		return names

@@ -19,9 +19,14 @@ func RecordSystemMetrics() {
 			return
 		}
 
-		manufacturer := info.Vendor
+		manufacturer := readSysfsValue("/sys/class/dmi/id/sys_vendor")
 		if manufacturer == "" {
-			manufacturer = info.HostID
+			manufacturer = info.Platform
+		}
+
+		model := readSysfsValue("/sys/class/dmi/id/product_name")
+		if model == "" {
+			model = info.KernelVersion
 		}
 
 		SystemInfo.With(prometheus.Labels{
@@ -29,7 +34,7 @@ func RecordSystemMetrics() {
 			"os_version":      fmt.Sprintf("%s %s", info.Platform, info.PlatformVersion),
 			"os_architecture": info.KernelArch,
 			"manufacturer":    manufacturer,
-			"model":           info.KernelVersion,
+			"model":           model,
 		}).Set(1)
 
 		ticker := time.NewTicker(5 * time.Second)

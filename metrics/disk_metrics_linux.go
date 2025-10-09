@@ -177,14 +177,6 @@ func loadDiskMetadata() map[string]diskMetadata {
 	return metadata
 }
 
-func readSysfsValue(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
 func diskBaseName(device string) string {
 	base := filepath.Base(device)
 	base = strings.TrimPrefix(base, "/dev/")

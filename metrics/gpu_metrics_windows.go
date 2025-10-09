@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"github.com/StackExchange/wmi"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type Win32_VideoController struct {

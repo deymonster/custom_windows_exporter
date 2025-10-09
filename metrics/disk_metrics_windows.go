@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/StackExchange/wmi"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shirou/gopsutil/disk"
 )
 
