@@ -135,11 +135,11 @@ func parseMemoryModules() ([]memoryModule, error) {
 					}
 				}
 			case "Manufacturer":
-				module.Manufacturer = value
+				module.Manufacturer = sanitizeMemoryField(value)
 			case "Part Number":
-				module.PartNumber = value
+				module.PartNumber = sanitizeMemoryField(value)
 			case "Serial Number":
-				module.SerialNumber = value
+				module.SerialNumber = sanitizeMemoryField(value)
 			case "Configured Clock Speed":
 				module.Speed = normalizeMemorySpeed(value)
 			case "Speed":
@@ -153,15 +153,9 @@ func parseMemoryModules() ([]memoryModule, error) {
 			continue
 		}
 
-		if module.Manufacturer == "" {
-			module.Manufacturer = "unknown"
-		}
-		if module.PartNumber == "" {
-			module.PartNumber = "unknown"
-		}
-		if module.SerialNumber == "" {
-			module.SerialNumber = "unknown"
-		}
+		module.Manufacturer = sanitizeMemoryField(module.Manufacturer)
+		module.PartNumber = sanitizeMemoryField(module.PartNumber)
+		module.SerialNumber = sanitizeMemoryField(module.SerialNumber)
 		if module.Speed == "" {
 			module.Speed = "unknown"
 		}
@@ -189,4 +183,23 @@ func normalizeMemorySpeed(value string) string {
 	}
 
 	return fmt.Sprintf("%s%s", number, strings.TrimSpace(unit))
+}
+
+func sanitizeMemoryField(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "unknown"
+	}
+
+	lower := strings.ToLower(trimmed)
+	switch lower {
+	case "unknown", "none", "n/a", "not specified", "no module installed":
+		return "unknown"
+	}
+
+	if trimmed == "0000" {
+		return "unknown"
+	}
+
+	return trimmed
 }

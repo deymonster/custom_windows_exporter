@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,17 @@ type diskHealthEntry struct {
 	CheckedAt time.Time
 }
 
+type diskAggregate struct {
+	total uint64
+	used  uint64
+	free  uint64
+}
+
+type diskIOState struct {
+	stat      disk.IOCountersStat
+	timestamp time.Time
+}
+
 var (
 	diskHealthCache = map[string]diskHealthEntry{}
 	diskHealthMu    sync.Mutex
@@ -37,17 +49,20 @@ func RecordDiskUsage() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		prevIO := make(map[string]disk.IOCountersStat)
+		prevIO := make(map[string]diskIOState)
 
 		for {
 			metadata := loadDiskMetadata()
 
-			partitions, err := disk.Partitions(false)
+			partitions, err := disk.Partitions(true)
 			if err != nil {
 				log.Printf("failed to list disk partitions: %v", err)
 				<-ticker.C
 				continue
 			}
+
+			aggregates := make(map[string]*diskAggregate)
+			seenDevices := make(map[string]struct{})
 
 			ioCounters, err := disk.IOCounters()
 			if err != nil {
@@ -57,6 +72,10 @@ func RecordDiskUsage() {
 
 			for _, part := range partitions {
 				if part.Mountpoint == "" {
+					continue
+				}
+
+				if _, skip := seenDevices[part.Device]; skip {
 					continue
 				}
 
@@ -75,38 +94,50 @@ func RecordDiskUsage() {
 					continue
 				}
 
+				seenDevices[part.Device] = struct{}{}
+
+				agg := aggregates[baseName]
+				if agg == nil {
+					agg = &diskAggregate{}
+					aggregates[baseName] = agg
+				}
+
+				agg.total += usage.Total
+				agg.used += usage.Used
+				agg.free += usage.Free
+
+			}
+
+			for baseName, agg := range aggregates {
 				meta := metadata[baseName]
 				model := meta.Model
 				if model == "" {
 					model = baseName
 				}
 
-				diskLabel := part.Mountpoint
-				if diskLabel == "" {
-					diskLabel = part.Device
-				}
+				diskLabel := "/dev/" + baseName
 
 				DiskUsage.With(prometheus.Labels{
 					"disk":  diskLabel,
 					"model": model,
 					"type":  "total",
-				}).Set(float64(usage.Total))
+				}).Set(float64(agg.total))
 
 				DiskUsage.With(prometheus.Labels{
 					"disk":  diskLabel,
 					"model": model,
 					"type":  "free",
-				}).Set(float64(usage.Free))
+				}).Set(float64(agg.free))
 
 				DiskUsage.With(prometheus.Labels{
 					"disk":  diskLabel,
 					"model": model,
 					"type":  "used",
-				}).Set(float64(usage.Used))
+				}).Set(float64(agg.used))
 
 				usedPercent := 0.0
-				if usage.Total > 0 {
-					usedPercent = (float64(usage.Used) / float64(usage.Total)) * 100
+				if agg.total > 0 {
+					usedPercent = (float64(agg.used) / float64(agg.total)) * 100
 				}
 
 				DiskUsagePercent.With(prometheus.Labels{
@@ -115,10 +146,22 @@ func RecordDiskUsage() {
 				}).Set(usedPercent)
 
 				if counter, ok := ioCounters[baseName]; ok {
-					if prev, exists := prevIO[baseName]; exists {
-						duration := 5.0
-						readRate := float64(counter.ReadBytes-prev.ReadBytes) / duration
-						writeRate := float64(counter.WriteBytes-prev.WriteBytes) / duration
+					state, exists := prevIO[baseName]
+					if exists {
+						elapsed := time.Since(state.timestamp).Seconds()
+						if elapsed <= 0 {
+							elapsed = 5
+						}
+
+						readRate := float64(counter.ReadBytes-state.stat.ReadBytes) / elapsed
+						writeRate := float64(counter.WriteBytes-state.stat.WriteBytes) / elapsed
+
+						if readRate < 0 {
+							readRate = 0
+						}
+						if writeRate < 0 {
+							writeRate = 0
+						}
 
 						DiskReadBytes.With(prometheus.Labels{
 							"disk":  diskLabel,
@@ -129,15 +172,45 @@ func RecordDiskUsage() {
 							"disk":  diskLabel,
 							"model": model,
 						}).Set(writeRate)
+					} else {
+						DiskReadBytes.With(prometheus.Labels{
+							"disk":  diskLabel,
+							"model": model,
+						}).Set(0)
+
+						DiskWriteBytes.With(prometheus.Labels{
+							"disk":  diskLabel,
+							"model": model,
+						}).Set(0)
 					}
-					prevIO[baseName] = counter
+
+					prevIO[baseName] = diskIOState{stat: counter, timestamp: time.Now()}
+				} else {
+					DiskReadBytes.With(prometheus.Labels{
+						"disk":  diskLabel,
+						"model": model,
+					}).Set(0)
+					DiskWriteBytes.With(prometheus.Labels{
+						"disk":  diskLabel,
+						"model": model,
+					}).Set(0)
+				}
+
+				sizeBytes := agg.total
+				if sizeBytes == 0 {
+					sectors := readSysfsValue(filepath.Join("/sys/block", baseName, "size"))
+					if sectors != "" {
+						if value, err := strconv.ParseUint(sectors, 10, 64); err == nil {
+							sizeBytes = value * 512
+						}
+					}
 				}
 
 				DiskHealthStatus.With(prometheus.Labels{
 					"disk":   diskLabel,
-					"type":   part.Fstype,
+					"type":   diskPhysicalType(baseName),
 					"status": diskHealthStatus(baseName),
-					"size":   fmt.Sprintf("%d", usage.Total),
+					"size":   fmt.Sprintf("%d", sizeBytes),
 				}).Set(1)
 			}
 
@@ -200,6 +273,31 @@ func diskBaseName(device string) string {
 			return unicode.IsDigit(r)
 		})
 	}
+}
+
+func diskPhysicalType(base string) string {
+	rotational := readSysfsValue(filepath.Join("/sys/block", base, "queue", "rotational"))
+	switch strings.TrimSpace(rotational) {
+	case "0":
+		return "SSD"
+	case "1":
+		return "HDD"
+	}
+
+	if strings.HasPrefix(base, "nvme") {
+		return "SSD"
+	}
+
+	media := readSysfsValue(filepath.Join("/sys/block", base, "device", "media"))
+	media = strings.ToLower(media)
+	switch {
+	case strings.Contains(media, "ssd"):
+		return "SSD"
+	case strings.Contains(media, "hdd") || strings.Contains(media, "rotating"):
+		return "HDD"
+	}
+
+	return "unknown"
 }
 
 func diskHealthStatus(base string) string {
