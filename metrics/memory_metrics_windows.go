@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -18,40 +20,6 @@ type Win32_PhysicalMemory struct {
 	Speed        uint32
 }
 
-var (
-
-	// Memory
-	MemoryModuleInfo = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "memory_module_info",
-			Help: "Memory module information",
-		},
-		[]string{"capacity", "manufacturer", "part_number", "serial_number", "speed"},
-	)
-
-	TotalMemory = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "total_memory_bytes",
-			Help: "Total memory on system",
-		},
-	)
-
-	UsedMemory = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "used_memory_bytes",
-			Help: "Used memory on system",
-		},
-	)
-
-	FreeMemory = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "free_memory_bytes",
-			Help: "Free memory on system",
-		},
-	)
-)
-
-
 // GetMemoryModules retrieves information about physical memory modules in the system
 // by querying the Win32_PhysicalMemory WMI class. It returns a slice of
 // Win32_PhysicalMemory structs containing details such as capacity, manufacturer,
@@ -66,7 +34,6 @@ func GetMemoryModules() ([]Win32_PhysicalMemory, error) {
 	return memModules, nil
 }
 
-
 // GetMemoryUsage retrieves information about virtual memory usage on the system.
 // It returns a mem.VirtualMemoryStat struct containing details such as total,
 // used, free, and cached memory, or an error if the query fails.
@@ -77,7 +44,6 @@ func GetMemoryUsage() (*mem.VirtualMemoryStat, error) {
 	}
 	return v, nil
 }
-
 
 // RecordMemoryModuleInfo records information about physical memory modules in the system
 // to prometheus metrics. It records the capacity in GB, manufacturer, part number, serial
@@ -103,6 +69,7 @@ func RecordMemoryModuleInfo() {
 		}).Set(memoryInGb)
 	}
 }
+
 // RecordMemoryUsage records virtual memory usage on the system in prometheus metrics.
 // It records total, used, and free memory in bytes. It runs in a separate goroutine
 // and updates the metrics every 5 seconds.

@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -24,49 +26,6 @@ type Win32_LogicalDisk struct {
 	FreeSpace  uint64
 	FileSystem string
 }
-
-var (
-	// Disk usage
-	DiskUsage = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "disk_usage_bytes",
-			Help: "Disk usage on system",
-		},
-		[]string{"disk", "model", "type"},
-	)
-
-	DiskUsagePercent = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "disk_usage_percent",
-			Help: "Disk usage on system",
-		},
-		[]string{"disk", "model"},
-	)
-
-	DiskReadBytes = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "disk_read_bytes_per_second",
-			Help: "Disk read bytes per second",
-		},
-		[]string{"disk", "model"},
-	)
-
-	DiskWriteBytes = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "disk_write_bytes_per_second",
-			Help: "Disk write bytes per second",
-		},
-		[]string{"disk", "model"},
-	)
-
-	DiskHealthStatus = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "disk_health_status",
-			Help: "Health status of disk",
-		},
-		[]string{"disk", "type", "status", "size"},
-	)
-)
 
 // GetPhysicalDisks retrieves information about physical disks in the system
 // by querying the MSFT_PhysicalDisk WMI class. It returns a slice of

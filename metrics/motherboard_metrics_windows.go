@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -14,16 +16,6 @@ type Win32_BaseBoard struct {
 	SerialNumber string
 	Version      string
 }
-
-var (
-	MotherboardInfo = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "motherboard_info",
-			Help: "Motherboard info",
-		},
-		[]string{"manufacturer", "product", "serial_number", "version"},
-	)
-)
 
 // GetMotherboardInfo retrieves information about the motherboard in the system
 // by querying the Win32_BaseBoard WMI class. It returns a slice of

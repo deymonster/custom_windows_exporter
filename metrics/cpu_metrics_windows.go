@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -19,26 +21,6 @@ type Win32_Processor struct {
 	LoadPercentage            uint32
 	NumberOfLogicalProcessors uint32
 }
-
-var (
-	// Proccessor Load
-	CpuUsage = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cpu_usage_percent",
-			Help: "Current CPU usage in percent",
-		},
-		[]string{"core", "processor", "logical_cores"},
-	)
-
-	// CPU Temperature
-	CpuTemperature = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "cpu_temperature",
-			Help: "Current CPU temperature in celcius",
-		},
-		[]string{"sensor"},
-	)
-)
 
 // getCpuInfo retrieves information about all processors in the system
 // by querying the Win32_Processor WMI class. It returns a slice of

@@ -5,10 +5,10 @@ go 1.23.0
 toolchain go1.23.2
 
 require (
-	github.com/StackExchange/wmi v1.2.1
-	github.com/prometheus/client_golang v1.20.4
-	github.com/shirou/gopsutil v3.21.11+incompatible
-	golang.org/x/sys v0.32.0
+        github.com/StackExchange/wmi v1.2.1
+        github.com/prometheus/client_golang v1.20.4
+        github.com/shirou/gopsutil v3.21.11+incompatible
+        golang.org/x/sys v0.32.0
 )
 
 require (

@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -14,16 +16,6 @@ type Win32_BIOS struct {
 	Version      string
 	ReleaseDate  string
 }
-
-var (
-	BiosInfo = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "bios_info",
-			Help: "BIOS information",
-		},
-		[]string{"manufacturer", "version", "release_date"},
-	)
-)
 
 func parseWMIDate(wmiDate string) (string, error) {
 	if len(wmiDate) < 8 {

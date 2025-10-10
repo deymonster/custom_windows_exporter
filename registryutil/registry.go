@@ -1,3 +1,5 @@
+//go:build windows
+
 package registryutil
 
 import (
@@ -42,27 +44,24 @@ func WriteUUIDToRegistry(uuid string) error {
 	return key.SetStringValue(valueKey, uuid)
 }
 
-
 // KeyExists checks if the registry key under LOCAL_MACHINE\SOFTWARE\NITRINOnetControlManager\Agent
 // exists and returns a boolean value indicating its existence. If the key does not exist or there
 // is an error while checking, it returns an error.
 func KeyExists() (bool, error) {
-    key, err := registry.OpenKey(registry.LOCAL_MACHINE, regPath, registry.QUERY_VALUE)
-    if err != nil {
-        if err == registry.ErrNotExist {
-            return false, nil
-        }
-        return false, err
-    }
-    key.Close()
-    return true, nil
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, regPath, registry.QUERY_VALUE)
+	if err != nil {
+		if err == registry.ErrNotExist {
+			return false, nil
+		}
+		return false, err
+	}
+	key.Close()
+	return true, nil
 }
-
 
 // CreateKey creates a registry key under LOCAL_MACHINE\SOFTWARE\NITRINOnetControlManager\Agent with
 // full access. If the key already exists or there is an error while creating, it returns an error.
 func CreateKey() error {
-    _, _, err := registry.CreateKey(registry.LOCAL_MACHINE, regPath, registry.ALL_ACCESS)
-    return err
+	_, _, err := registry.CreateKey(registry.LOCAL_MACHINE, regPath, registry.ALL_ACCESS)
+	return err
 }
-

@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -12,24 +14,6 @@ type Win32_VideoController struct {
 	Name       string
 	AdapterRAM uint64
 }
-
-var (
-	GpuInfo = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "gpu_info",
-			Help: "GPU info on system",
-		},
-		[]string{"name"},
-	)
-
-	GpuMemory = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "gpu_memory_bytes",
-			Help: "GPU memory on system in bytes",
-		},
-		[]string{"name"},
-	)
-)
 
 // GetGPUInfo retrieves information about video controllers (GPUs) in the system
 // by querying the Win32_VideoController WMI class. It returns a slice of

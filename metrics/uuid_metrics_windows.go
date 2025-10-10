@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -22,23 +24,6 @@ type Win32_ComputerSystem_UUID struct {
 type Win32_NetworkAdapter_UUID struct {
 	MACAddress string
 }
-
-var (
-	SystemUUID = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "UNIQUE_ID_SYSTEM",
-			Help: "Unique ID for the system",
-		},
-		[]string{"uuid"},
-	)
-
-	HardwareUUIDChanged = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "UNIQUE_ID_CHANGED",
-			Help: "Indicates if the system UUID has changed",
-		},
-	)
-)
 
 // generateHardwareUUID generates a unique hardware UUID for the system by
 // collecting various hardware and system information. It retrieves data from
@@ -147,55 +132,45 @@ func GenerateHardwareUUID() (string, error) {
 
 func RecordUUIDMetrics() {
 	go func() {
-		currentUUID, err := GenerateHardwareUUID()
-		if err != nil {
-			log.Printf("Failed to generate hardware UUID: %v", err)
-			return
+		if err := RefreshUUIDMetrics(); err != nil {
+			log.Printf("Failed to record UUID metrics: %v", err)
 		}
-
-		// Проверяем существование ключа
-		exists, err := registryutil.KeyExists()
-		if err != nil {
-			log.Printf("Error checking registry key: %v", err)
-			return
-		}
-
-		if !exists {
-			// Создаем ключ если не существует
-			if err := registryutil.CreateKey(); err != nil {
-				log.Printf("Failed to create registry key: %v", err)
-				return
-			}
-
-			// Записываем UUID в реестр
-			if err := registryutil.WriteUUIDToRegistry(currentUUID); err != nil {
-				log.Printf("Failed to write initial UUID to registry: %v", err)
-				return
-			}
-			log.Println("Created new registry key and stored initial UUID")
-			HardwareUUIDChanged.Set(0)
-		} else {
-			// Сравниваем с сохраненным UUID
-			storedUUID, err := registryutil.ReadUUIDFromRegistry()
-			if err != nil {
-				log.Printf("Failed to read UUID from registry: %v", err)
-				HardwareUUIDChanged.Set(0)
-				return
-			}
-
-			if storedUUID != currentUUID {
-
-				// Устанавливаем флаг изменения
-				HardwareUUIDChanged.Set(1)
-				log.Printf("Hardware UUID changed! Old: %s, New: %s", storedUUID, currentUUID)
-			} else {
-				HardwareUUIDChanged.Set(0)
-			}
-		}
-		// Записываем UUID в метрику
-		SystemUUID.With(prometheus.Labels{
-			"uuid": currentUUID,
-		}).Set(1)
-
 	}()
+}
+
+func RefreshUUIDMetrics() error {
+	currentUUID, err := GenerateHardwareUUID()
+	if err != nil {
+		return fmt.Errorf("generate hardware UUID: %w", err)
+	}
+
+	exists, err := registryutil.KeyExists()
+	if err != nil {
+		return fmt.Errorf("check registry key: %w", err)
+	}
+
+	if !exists {
+		if err := registryutil.CreateKey(); err != nil {
+			return fmt.Errorf("create registry key: %w", err)
+		}
+		if err := registryutil.WriteUUIDToRegistry(currentUUID); err != nil {
+			return fmt.Errorf("store hardware UUID: %w", err)
+		}
+		HardwareUUIDChanged.Set(0)
+	} else {
+		storedUUID, err := registryutil.ReadUUIDFromRegistry()
+		if err != nil {
+			return fmt.Errorf("read stored UUID: %w", err)
+		}
+		if storedUUID != currentUUID {
+			HardwareUUIDChanged.Set(1)
+			log.Printf("hardware UUID changed: old=%s new=%s", storedUUID, currentUUID)
+		} else {
+			HardwareUUIDChanged.Set(0)
+		}
+	}
+
+	SystemUUID.Reset()
+	SystemUUID.With(prometheus.Labels{"uuid": currentUUID}).Set(1)
+	return nil
 }

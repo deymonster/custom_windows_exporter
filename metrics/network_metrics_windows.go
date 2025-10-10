@@ -1,3 +1,5 @@
+//go:build windows
+
 package metrics
 
 import (
@@ -20,49 +22,6 @@ type Win32_NetworkAdapter struct {
 	Description     string
 	NetConnectionID string
 }
-
-// Определение метрик
-var (
-	NetworkStatus = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "network_status",
-			Help: "Network status on system (1 = up, 0 = down)",
-		},
-		[]string{"interface"},
-	)
-
-	NetworkRxBytesPerSecond = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "network_rx_bytes_per_second",
-			Help: "Incoming network traffic in bytes per second",
-		},
-		[]string{"interface"},
-	)
-
-	NetworkTxBytesPerSecond = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "network_tx_bytes_per_second",
-			Help: "Outgoing network traffic in bytes per second",
-		},
-		[]string{"interface"},
-	)
-
-	NetworkErrors = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "network_errors",
-			Help: "Number of network errors",
-		},
-		[]string{"interface"},
-	)
-
-	NetworkDroppedPackets = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "network_dropped_packets",
-			Help: "Number of network dropped packets",
-		},
-		[]string{"interface"},
-	)
-)
 
 // GetPhysicalNetworkAdapters retrieves information about physical network adapters in the system
 // by querying the Win32_NetworkAdapter WMI class. It filters out virtual adapters and adapters
@@ -159,7 +118,6 @@ func RecordNetworkTraffic(prevStats map[string]net.IOCountersStat, currentStats 
 
 	return newStats
 }
-
 
 // RecordNetworkMetrics runs in a separate goroutine and updates the network metrics
 // every 5 seconds. It records the status of physical network adapters and their
