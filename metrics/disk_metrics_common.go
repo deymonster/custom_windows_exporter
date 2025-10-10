@@ -8,7 +8,7 @@ var (
 			Name: "disk_usage_bytes",
 			Help: "Disk usage on system",
 		},
-		[]string{"disk", "model", "type"},
+		[]string{"disk", "model", "serial", "type"},
 	)
 
 	DiskUsagePercent = prometheus.NewGaugeVec(
@@ -16,7 +16,7 @@ var (
 			Name: "disk_usage_percent",
 			Help: "Disk usage on system",
 		},
-		[]string{"disk", "model"},
+		[]string{"disk", "model", "serial"},
 	)
 
 	DiskReadBytes = prometheus.NewGaugeVec(
@@ -24,7 +24,7 @@ var (
 			Name: "disk_read_bytes_per_second",
 			Help: "Disk read bytes per second",
 		},
-		[]string{"disk", "model"},
+		[]string{"disk", "model", "serial"},
 	)
 
 	DiskWriteBytes = prometheus.NewGaugeVec(
@@ -32,7 +32,7 @@ var (
 			Name: "disk_write_bytes_per_second",
 			Help: "Disk write bytes per second",
 		},
-		[]string{"disk", "model"},
+		[]string{"disk", "model", "serial"},
 	)
 
 	DiskHealthStatus = prometheus.NewGaugeVec(
@@ -40,6 +40,6 @@ var (
 			Name: "disk_health_status",
 			Help: "Health status of disk",
 		},
-		[]string{"disk", "type", "status", "size"},
+		[]string{"disk", "serial", "type", "status", "size"},
 	)
 )

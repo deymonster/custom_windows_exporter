@@ -39,6 +39,10 @@ func RecordNetworkMetrics() {
 
 			displayNames := make(map[string]string, len(interfaces))
 			for _, iface := range interfaces {
+				if iface.Name == "lo" {
+					continue
+				}
+
 				if iface.Name == "" {
 					continue
 				}
@@ -65,6 +69,10 @@ func RecordNetworkMetrics() {
 			}
 
 			for _, stat := range stats {
+				if stat.Name == "lo" {
+					continue
+				}
+
 				display := displayNames[stat.Name]
 				if display == "" {
 					display = friendlyInterfaceName(stat.Name)
