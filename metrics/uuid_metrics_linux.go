@@ -110,9 +110,9 @@ func GenerateHardwareUUID() (string, error) {
 		sb.WriteString(memorySummary)
 	}
 
-	for _, gpu := range discoverGPUNames() {
+	for _, gpu := range discoverGPUDevices() {
 		sb.WriteString("|")
-		sb.WriteString(gpu)
+		sb.WriteString(gpu.Name)
 	}
 
 	hash := sha256.Sum256([]byte(sb.String()))

@@ -94,6 +94,10 @@ func RecordDiskUsage() {
 					continue
 				}
 
+				if _, ok := metadata[baseName]; !ok {
+					continue
+				}
+
 				seenDevices[part.Device] = struct{}{}
 
 				agg := aggregates[baseName]
@@ -115,24 +119,32 @@ func RecordDiskUsage() {
 					model = baseName
 				}
 
+				serial := strings.TrimSpace(meta.Serial)
+				if serial == "" {
+					serial = "unknown"
+				}
+
 				diskLabel := "/dev/" + baseName
 
 				DiskUsage.With(prometheus.Labels{
-					"disk":  diskLabel,
-					"model": model,
-					"type":  "total",
+					"disk":   diskLabel,
+					"model":  model,
+					"serial": serial,
+					"type":   "total",
 				}).Set(float64(agg.total))
 
 				DiskUsage.With(prometheus.Labels{
-					"disk":  diskLabel,
-					"model": model,
-					"type":  "free",
+					"disk":   diskLabel,
+					"model":  model,
+					"serial": serial,
+					"type":   "free",
 				}).Set(float64(agg.free))
 
 				DiskUsage.With(prometheus.Labels{
-					"disk":  diskLabel,
-					"model": model,
-					"type":  "used",
+					"disk":   diskLabel,
+					"model":  model,
+					"serial": serial,
+					"type":   "used",
 				}).Set(float64(agg.used))
 
 				usedPercent := 0.0
@@ -141,8 +153,9 @@ func RecordDiskUsage() {
 				}
 
 				DiskUsagePercent.With(prometheus.Labels{
-					"disk":  diskLabel,
-					"model": model,
+					"disk":   diskLabel,
+					"model":  model,
+					"serial": serial,
 				}).Set(usedPercent)
 
 				if counter, ok := ioCounters[baseName]; ok {
@@ -164,35 +177,41 @@ func RecordDiskUsage() {
 						}
 
 						DiskReadBytes.With(prometheus.Labels{
-							"disk":  diskLabel,
-							"model": model,
+							"disk":   diskLabel,
+							"model":  model,
+							"serial": serial,
 						}).Set(readRate)
 
 						DiskWriteBytes.With(prometheus.Labels{
-							"disk":  diskLabel,
-							"model": model,
+							"disk":   diskLabel,
+							"model":  model,
+							"serial": serial,
 						}).Set(writeRate)
 					} else {
 						DiskReadBytes.With(prometheus.Labels{
-							"disk":  diskLabel,
-							"model": model,
+							"disk":   diskLabel,
+							"model":  model,
+							"serial": serial,
 						}).Set(0)
 
 						DiskWriteBytes.With(prometheus.Labels{
-							"disk":  diskLabel,
-							"model": model,
+							"disk":   diskLabel,
+							"model":  model,
+							"serial": serial,
 						}).Set(0)
 					}
 
 					prevIO[baseName] = diskIOState{stat: counter, timestamp: time.Now()}
 				} else {
 					DiskReadBytes.With(prometheus.Labels{
-						"disk":  diskLabel,
-						"model": model,
+						"disk":   diskLabel,
+						"model":  model,
+						"serial": serial,
 					}).Set(0)
 					DiskWriteBytes.With(prometheus.Labels{
-						"disk":  diskLabel,
-						"model": model,
+						"disk":   diskLabel,
+						"model":  model,
+						"serial": serial,
 					}).Set(0)
 				}
 
@@ -206,8 +225,14 @@ func RecordDiskUsage() {
 					}
 				}
 
+				healthDisk := model
+				if healthDisk == "" {
+					healthDisk = diskLabel
+				}
+
 				DiskHealthStatus.With(prometheus.Labels{
-					"disk":   diskLabel,
+					"disk":   healthDisk,
+					"serial": serial,
 					"type":   diskPhysicalType(baseName),
 					"status": diskHealthStatus(baseName),
 					"size":   fmt.Sprintf("%d", sizeBytes),
@@ -228,7 +253,7 @@ func loadDiskMetadata() map[string]diskMetadata {
 	metadata := make(map[string]diskMetadata)
 	for _, entry := range entries {
 		name := entry.Name()
-		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "fd") {
+		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "fd") || strings.HasPrefix(name, "dm-") || strings.HasPrefix(name, "md") || strings.HasPrefix(name, "sr") {
 			continue
 		}
 
@@ -243,7 +268,7 @@ func loadDiskMetadata() map[string]diskMetadata {
 
 		metadata[name] = diskMetadata{
 			Model:  fullModel,
-			Serial: serial,
+			Serial: strings.TrimSpace(serial),
 		}
 	}
 

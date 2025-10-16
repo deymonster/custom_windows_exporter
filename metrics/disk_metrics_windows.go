@@ -162,6 +162,7 @@ func RecordDiskUsage() {
 			}
 			DiskHealthStatus.With(prometheus.Labels{
 				"disk":   drive.FriendlyName,
+				"serial": drive.SerialNumber,
 				"type":   mediaTypeStr,
 				"status": healthStatusStr,
 				"size":   fmt.Sprintf("%d", drive.Size),
@@ -182,27 +183,31 @@ func RecordDiskUsage() {
 
 				// Записываем метрики использования диска
 				DiskUsage.With(prometheus.Labels{
-					"disk":  part.DeviceID,
-					"model": model,
-					"type":  "total",
+					"disk":   part.DeviceID,
+					"model":  model,
+					"serial": "unknown",
+					"type":   "total",
 				}).Set(float64(part.Size))
 
 				DiskUsage.With(prometheus.Labels{
-					"disk":  part.DeviceID,
-					"model": model,
-					"type":  "free",
+					"disk":   part.DeviceID,
+					"model":  model,
+					"serial": "unknown",
+					"type":   "free",
 				}).Set(float64(part.FreeSpace))
 
 				DiskUsage.With(prometheus.Labels{
-					"disk":  part.DeviceID,
-					"model": model,
-					"type":  "used",
+					"disk":   part.DeviceID,
+					"model":  model,
+					"serial": "unknown",
+					"type":   "used",
 				}).Set(float64(part.Size - part.FreeSpace))
 
 				usedPercent := (float64(part.Size-part.FreeSpace) / float64(part.Size)) * 100
 				DiskUsagePercent.With(prometheus.Labels{
-					"disk":  part.DeviceID,
-					"model": model,
+					"disk":   part.DeviceID,
+					"model":  model,
+					"serial": "unknown",
 				}).Set(usedPercent)
 
 				// Получаем и записываем метрики IO
@@ -218,13 +223,15 @@ func RecordDiskUsage() {
 					writeSpeed := float64(current.WriteBytes-prev.WriteBytes) / duration
 
 					DiskReadBytes.With(prometheus.Labels{
-						"disk":  part.DeviceID,
-						"model": model,
+						"disk":   part.DeviceID,
+						"model":  model,
+						"serial": "unknown",
 					}).Set(readSpeed)
 
 					DiskWriteBytes.With(prometheus.Labels{
-						"disk":  part.DeviceID,
-						"model": model,
+						"disk":   part.DeviceID,
+						"model":  model,
+						"serial": "unknown",
 					}).Set(writeSpeed)
 				}
 				prevIO[part.DeviceID] = current
