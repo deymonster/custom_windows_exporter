@@ -186,3 +186,33 @@ sudo cp ./bin/nitrinonetcmanager /usr/local/bin/nitrinonetcmanager && sudo chmod
 ```bash
 sudo tail -n 100 /var/log/nitrinonetcmanager/service.log
 ```
+
+## ⚙️ Конфигурация устройства (Serial Number, Location, Device Tag)
+
+Агент публикует метрику `device_serial_number_info` с лейблами:
+- `serial_number`
+- `location`
+- `device_tag`
+
+Эти значения читаются из YAML-файла конфигурации. Если файл отсутствует, он создаётся автоматически с `unknown` значениями.
+
+Пути по умолчанию:
+- Windows: `C:\ProgramData\NITRINOnetControlManager\config.yml`
+- Linux: `/etc/nitrinonetcmanager/config.yml`
+
+Переопределение пути:
+- Установите переменную окружения `NCM_CONFIG_PATH` и укажите собственный путь к `config.yml`.
+
+Формат файла `config.yml`:
+```yaml
+serial_number: "SN-123456"
+location: "Moscow-1"
+device_tag: "rack-07-node-12"
+```
+
+Горячее обновление:
+- Агент отслеживает изменения файла (`fsnotify`). При сохранении новые значения автоматически попадают в метрику `device_serial_number_info`.
+
+Проверка метрики:
+- Откройте `/metrics` и найдите строку вида:
+  `device_serial_number_info{serial_number="SN-123456",location="Moscow-1",device_tag="rack-07-node-12"} 1`
