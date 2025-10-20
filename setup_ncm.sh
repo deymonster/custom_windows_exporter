@@ -3,10 +3,12 @@ set -euo pipefail
 
 # Путь к бинарю можно передать первым аргументом, иначе ./nitrinonetcmanager
 BIN="${1:-./nitrinonetcmanager}"
-# Необязательный второй аргумент: общий handshake-ключ для всех агентов
+# Необязательный второй аргумент: общий handshake-ключ для всех агентов (если не задан - читаем из конфигурации или генерируем)
 HANDSHAKE="${2:-}"
+# Необязательный третий аргумент: путь к внешнему конфигу установщика (если не задан - автопоиск)
+CONFIG_FILE="${3:-}"
 
-API_PASSWORD="ys51Bi3P5OSIS48"
+API_PASSWORD_DEFAULT="ys51Bi3P5OSIS48"
 
 CONFIG_DIR="/etc/nitrinonetcmanager"
 CERT_DIR="$CONFIG_DIR/certs"
@@ -18,20 +20,22 @@ SERVICE_LOG="$LOG_DIR/service.log"
 
 if [[ ! -f "$BIN" ]]; then
   echo "Не найден бинарь: $BIN"
-  echo "Использование: bash setup_ncm.sh /путь/к/nitrinonetcmanager"
+  echo "Использование: bash setup_ncm.sh /путь/к/nitrinonetcmanager [HANDSHAKE] [CONFIG_FILE]"
   exit 1
 fi
 if [[ ! -x "$BIN" ]]; then
   chmod +x "$BIN"
 fi
 
+# Прочитать внешний конфиг (если указан/найден)
+read_installer_conf
+
 # Устанавливаем бинарь в стандартное место, чтобы ncmctl работал без аргументов
 sudo cp "$BIN" /usr/local/bin/nitrinonetcmanager
 sudo chmod +x /usr/local/bin/nitrinonetcmanager
 
-echo "[1/8] Установка зависимостей"
-sudo apt-get update -y
-sudo apt-get install -y openssl smartmontools nvme-cli dmidecode pciutils lsof
+# Установка зависимостей кросс-дистрибутивно
+install_prereqs
 
 echo "[2/8] Остановка процессов, занявших порты 9182/9183"
 PIDS=$(sudo lsof -t -i :9182 -i :9183 || true)
@@ -51,14 +55,17 @@ echo "[3/8] Создание каталогов"
 sudo mkdir -p "$CONFIG_DIR" "$CERT_DIR" "$LOG_DIR" "$STATE_DIR"
 
 echo "[4/8] Запись API-пароля"
-echo "$API_PASSWORD" | sudo tee "$CONFIG_DIR/api.password" >/dev/null
+echo "${API_PASSWORD}" | sudo tee "$CONFIG_DIR/api.password" >/dev/null
 
-echo "[5/8] Генерация handshake ключа (ослаблю права для удобства curl)"
-# Если вы передали ключ вторым аргументом — используем его, иначе генерируем
+echo "[5/8] Генерация/задание handshake ключа"
 if [[ -n "$HANDSHAKE" ]]; then
   echo "$HANDSHAKE" | sudo tee "$CONFIG_DIR/handshake.key" >/dev/null
 else
-  sudo sh -c "openssl rand -base64 32 > '$CONFIG_DIR/handshake.key'"
+  if [[ -n "${NCM_HANDSHAKE_KEY:-}" ]]; then
+    echo "$NCM_HANDSHAKE_KEY" | sudo tee "$CONFIG_DIR/handshake.key" >/dev/null
+  else
+    sudo sh -c "openssl rand -base64 32 > '$CONFIG_DIR/handshake.key'"
+  fi
 fi
 sudo chmod 644 "$CONFIG_DIR/handshake.key"
 
@@ -72,8 +79,6 @@ sudo openssl req -x509 -newkey rsa:2048 \
   -addext "subjectAltName=DNS:${HOST},DNS:localhost,IP:127.0.0.1"
 
 echo "[7/8] Создание файла окружения"
-# Если ключ передан — можно положить его в окружение напрямую, либо через файл.
-# Оставим единообразно через файл, чтобы работал hot-reload при замене содержимого.
 sudo tee "$ENV_FILE" >/dev/null <<EOF
 NCM_API_PASSWORD_FILE=$CONFIG_DIR/api.password
 NCM_HANDSHAKE_KEY_FILE=$CONFIG_DIR/handshake.key
@@ -92,86 +97,77 @@ sudo tee /usr/local/bin/ncmctl >/dev/null <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
+SERVICE="nitrinonetcmanager"
 CONFIG_DIR="/etc/nitrinonetcmanager"
 ENV_FILE="$CONFIG_DIR/ncm.env"
 LOG_DIR="/var/log/nitrinonetcmanager"
 STATE_DIR="/var/lib/nitrinonetcmanager"
 PID_FILE="$STATE_DIR/ncm.pid"
-SERVICE_LOG="$LOG_DIR/service.log"
 BIN_DEFAULT="/usr/local/bin/nitrinonetcmanager"
 
 cmd="${1:-status}"
 bin="${2:-$BIN_DEFAULT}"
 
-exists() { command -v "$1" >/dev/null 2>&1; }
+has_systemd() { command -v systemctl >/dev/null 2>&1; }
 
 start() {
-  if [[ ! -f "$bin" ]]; then
-    echo "Бинарь не найден: $bin"
-    exit 1
+  if has_systemd; then
+    sudo systemctl enable --now "$SERVICE"
+  else
+    bash -c "set -a; source '$ENV_FILE'; set +a; nohup '$bin' >> '$LOG_DIR/service.log' 2>&1 & echo $! > '$PID_FILE'"
   fi
-  mkdir -p "$LOG_DIR" "$STATE_DIR"
-  if [[ -f "$PID_FILE" ]] && ps -p "$(cat "$PID_FILE")" >/dev/null 2>&1; then
-    echo "Уже запущен (PID $(cat "$PID_FILE"))"
-    exit 0
-  fi
-  # Гасим процессы на портах
-  PIDS=$(lsof -t -i :9182 -i :9183 || true)
-  [[ -n "$PIDS" ]] && kill $PIDS || true
-
-  bash -c "set -a; source '$ENV_FILE'; set +a; nohup '$bin' > '$SERVICE_LOG' 2>&1 & echo \$! > '$PID_FILE'"
-  echo "Запущен (PID $(cat "$PID_FILE"))"
+  echo "Запущен."
 }
 
 stop() {
-  if [[ -f "$PID_FILE" ]]; then
-    PID=$(cat "$PID_FILE")
-    kill "$PID" || true
-    sleep 1
-    ps -p "$PID" >/dev/null 2>&1 && kill -9 "$PID" || true
-    rm -f "$PID_FILE"
-    echo "Остановлен"
+  if has_systemd; then
+    sudo systemctl stop "$SERVICE" || true
+    sudo systemctl disable "$SERVICE" || true
   else
-    echo "PID-файл не найден; пытаюсь освободить порты"
-    PIDS=$(lsof -t -i :9182 -i :9183 || true)
-    [[ -n "$PIDS" ]] && kill $PIDS || true
+    if [[ -f "$PID_FILE" ]]; then
+      kill "$(cat "$PID_FILE")" || true
+      rm -f "$PID_FILE"
+    fi
+  fi
+  echo "Остановлен."
+}
+
+restart() {
+  if has_systemd; then
+    sudo systemctl restart "$SERVICE"
+  else
+    stop || true
+    start
+  fi
+}
+
+status() {
+  if has_systemd; then
+    sudo systemctl status "$SERVICE" --no-pager || true
+  else
+    if [[ -f "$PID_FILE" ]] && ps -p "$(cat "$PID_FILE")" >/dev/null 2>&1; then
+      echo "Статус: запущен (PID $(cat "$PID_FILE"))"
+    else
+      echo "Статус: не запущен"
+    fi
   fi
 }
 
 uninstall() {
-  echo "Остановка процесса и чистка файлов..."
-  # Остановить, удалить PID
   stop || true
-  rm -f "$PID_FILE" || true
-
-  # Удалить конфиг, логи, состояние (включая hardware_uuid, сертификаты, ключи, ncm.env)
-  rm -rf "$CONFIG_DIR" || true
-  rm -rf "$LOG_DIR" || true
-  rm -rf "$STATE_DIR" || true
-
-  # Удалить бинарь
-  rm -f "/usr/local/bin/nitrinonetcmanager" || true
-
-  echo "Удаляю ncmctl..."
-  rm -f "/usr/local/bin/ncmctl" || true
-
-  echo "Готово: агент и все файлы удалены."
-}
-
-status() {
-  if [[ -f "$PID_FILE" ]] && ps -p "$(cat "$PID_FILE")" >/dev/null 2>&1; then
-    echo "Статус: запущен (PID $(cat "$PID_FILE"))"
-  else
-    echo "Статус: не запущен"
+  if has_systemd; then
+    sudo rm -f "/etc/systemd/system/${SERVICE}.service"
+    sudo systemctl daemon-reload
   fi
-  echo "Порты:"
-  ss -lntp | grep -E '9182|9183' || true
+  rm -f "/usr/local/bin/nitrinonetcmanager" "/usr/local/bin/ncmctl"
+  rm -rf "$CONFIG_DIR" "$LOG_DIR" "$STATE_DIR"
+  echo "Удалён."
 }
 
 case "$cmd" in
   start) start ;;
   stop) stop ;;
-  restart) stop; start ;;
+  restart) restart ;;
   status) status ;;
   uninstall) uninstall ;;
   *) echo "Использование: ncmctl {start|stop|restart|status|uninstall} [путь/к/бинарю]"; exit 1 ;;
