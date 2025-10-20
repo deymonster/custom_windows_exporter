@@ -23,6 +23,10 @@ if [[ ! -x "$BIN" ]]; then
   chmod +x "$BIN"
 fi
 
+# Устанавливаем бинарь в стандартное место, чтобы ncmctl работал без аргументов
+sudo cp "$BIN" /usr/local/bin/nitrinonetcmanager
+sudo chmod +x /usr/local/bin/nitrinonetcmanager
+
 echo "[1/8] Установка зависимостей"
 sudo apt-get update -y
 sudo apt-get install -y openssl smartmontools nvme-cli dmidecode pciutils lsof
@@ -67,12 +71,13 @@ NCM_API_PASSWORD_FILE=$CONFIG_DIR/api.password
 NCM_HANDSHAKE_KEY_FILE=$CONFIG_DIR/handshake.key
 NCM_CERT_DIR=$CERT_DIR
 NCM_LOG_DIR=$LOG_DIR
+NCM_STATE_DIR=$STATE_DIR
 EOF
 sudo chmod 644 "$ENV_FILE"
 
 echo "[8/8] Запуск агента с корректным окружением и создание ncmctl"
 # Запускаем в фоне, пишем PID и лог
-sudo bash -c "set -a; source '$ENV_FILE'; set +a; nohup '$BIN' > '$SERVICE_LOG' 2>&1 & echo \$! > '$PID_FILE'"
+sudo bash -c "set -a; source '$ENV_FILE'; set +a; nohup '/usr/local/bin/nitrinonetcmanager' > '$SERVICE_LOG' 2>&1 & echo \$! > '$PID_FILE'"
 
 # Утилита управления
 sudo tee /usr/local/bin/ncmctl >/dev/null <<'EOF'

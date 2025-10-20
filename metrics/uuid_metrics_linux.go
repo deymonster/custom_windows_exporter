@@ -78,41 +78,40 @@ func GenerateHardwareUUID() (string, error) {
 	firstCPU := cpuInfo[0]
 	sb.WriteString(fmt.Sprintf("|%s|%d", firstCPU.ModelName, firstCPU.Cores))
 
+	// диски
 	for _, disk := range collectDiskIdentifiers() {
 		sb.WriteString("|")
 		sb.WriteString(disk)
 	}
 
-	hostInfo, err := host.Info()
-	if err == nil {
+	// система
+	if hostInfo, err := host.Info(); err == nil {
 		sb.WriteString(fmt.Sprintf("|%s|%s|%s", hostInfo.Hostname, hostInfo.Platform, hostInfo.PlatformVersion))
 	}
 
-	ifaces, err := gnet.Interfaces()
-	if err == nil {
-		for _, iface := range ifaces {
-			if iface.HardwareAddr != "" {
-				sb.WriteString(fmt.Sprintf("|%s", iface.HardwareAddr))
-				break
-			}
-		}
+	// MAC физического интерфейса
+	if mac := firstPhysicalMAC(); mac != "" {
+		sb.WriteString("|" + mac)
 	}
 
+	// материнская плата
 	baseboardVendor := readDMIField("board_vendor")
 	baseboardProduct := readDMIField("board_name")
 	baseboardSerial := readDMIField("board_serial")
 	baseboardVersion := readDMIField("board_version")
 	sb.WriteString(fmt.Sprintf("|%s|%s|%s|%s", baseboardVendor, baseboardProduct, baseboardSerial, baseboardVersion))
 
-	memorySummary := collectMemorySummary()
-	if memorySummary != "" {
-		sb.WriteString("|")
-		sb.WriteString(memorySummary)
+	// модули памяти (как в Windows)
+	if modules, err := parseMemoryModules(); err == nil && len(modules) > 0 {
+		for _, m := range modules {
+			sb.WriteString(fmt.Sprintf("|%s|%s|%s|%d|%s",
+				m.Manufacturer, m.PartNumber, m.SerialNumber, m.SizeBytes, m.Speed))
+		}
 	}
 
+	// GPU имя + объём
 	for _, gpu := range discoverGPUDevices() {
-		sb.WriteString("|")
-		sb.WriteString(gpu.Name)
+		sb.WriteString(fmt.Sprintf("|%s|%d", gpu.Name, gpu.MemoryBytes))
 	}
 
 	hash := sha256.Sum256([]byte(sb.String()))
@@ -172,4 +171,29 @@ func RefreshUUIDMetrics() error {
 	SystemUUID.Reset()
 	SystemUUID.With(prometheus.Labels{"uuid": currentUUID}).Set(1)
 	return nil
+}
+
+// helper: firstPhysicalMAC
+func firstPhysicalMAC() string {
+    ifaces, err := gnet.Interfaces()
+    if err != nil {
+        return ""
+    }
+    for _, iface := range ifaces {
+        if iface.HardwareAddr == "" || iface.Name == "" || strings.HasPrefix(iface.Name, "lo") {
+            continue
+        }
+        // физический интерфейс обычно имеет привязку к PCI: наличие /sys/class/net/<iface>/device
+        devPath := filepath.Join("/sys/class/net", iface.Name, "device")
+        if _, err := os.Stat(devPath); err == nil {
+            return iface.HardwareAddr
+        }
+    }
+    // fallback: первый любой MAC
+    for _, iface := range ifaces {
+        if iface.HardwareAddr != "" {
+            return iface.HardwareAddr
+        }
+    }
+    return ""
 }

@@ -28,3 +28,6 @@ configs/cerst/cert.pem
 
 # Mac os files
 .DS_Store
+
+# Binary files
+/bin/*

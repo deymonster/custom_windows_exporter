@@ -180,11 +180,13 @@ func parseMemoryModulesFromDmidecode() ([]memoryModule, error) {
 		if skip || module.SizeBytes == 0 {
 			continue
 		}
-
+		// дополнительный фильтр «не DRAM»
+		if shouldSkipModule(module) {
+			continue
+		}
 		if module.Speed == "" {
 			module.Speed = "unknown"
 		}
-
 		modules = append(modules, module)
 	}
 
@@ -247,12 +249,15 @@ func parseMemoryModulesFromLshw() ([]memoryModule, error) {
 	}
 
 	if module.SizeBytes > 0 {
-		if module.Speed == "" {
-			module.Speed = "unknown"
+		if shouldSkipModule(module) {
+			// пропускаем служебные/виртуальные/микро-устройства
+		} else {
+			if module.Speed == "" {
+				module.Speed = "unknown"
+			}
+			modules = append(modules, module)
 		}
-		modules = append(modules, module)
 	}
-
 	return modules, nil
 }
 
@@ -325,4 +330,22 @@ func sanitizeMemoryField(value string) string {
 	}
 
 	return trimmed
+}
+
+// helper: shouldSkipModule
+func shouldSkipModule(m memoryModule) bool {
+    // Отсечём «микро» объёмы, характерные для PCH SRAM (например, 2MB)
+    const minModuleBytes = 64 * 1024 * 1024 // 64MB
+    if m.SizeBytes < minModuleBytes {
+        return true
+    }
+    pn := strings.ToLower(m.PartNumber)
+    man := strings.ToLower(m.Manufacturer)
+    if strings.Contains(pn, "shared sram") || strings.Contains(pn, "pch") {
+        return true
+    }
+    if strings.Contains(man, "intel") && strings.Contains(pn, "cannon lake") {
+        return true
+    }
+    return false
 }
