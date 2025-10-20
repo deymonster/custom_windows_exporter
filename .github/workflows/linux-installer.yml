@@ -47,7 +47,7 @@ jobs:
       - name: Build Linux (${{ github.event.inputs.arch }})
         run: |
           GOOS=linux GOARCH=${{ github.event.inputs.arch }} CGO_ENABLED=0 \
-          go build -o ./bin/nitrinonetcmanager ./service/main_linux.go
+          go build -o ./bin/nitrinonetcmanager ./service
 
       - name: Install makeself
         run: |
