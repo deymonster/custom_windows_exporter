@@ -27,6 +27,74 @@ if [[ ! -x "$BIN" ]]; then
   chmod +x "$BIN"
 fi
 
+# Добавляем отсутствующие функции: read_installer_conf и install_prereqs
+read_installer_conf() {
+  local candidate
+  if [[ -n "${CONFIG_FILE:-}" && -f "$CONFIG_FILE" ]]; then
+    candidate="$CONFIG_FILE"
+  else
+    for f in "$PWD/ncm_installer.conf" "./ncm_installer.conf" "/etc/nitrinonetcmanager/ncm_installer.conf"; do
+      if [[ -f "$f" ]]; then
+        candidate="$f"
+        break
+      fi
+    done
+  fi
+
+  if [[ -n "${candidate:-}" ]]; then
+    # shellcheck disable=SC1090
+    source "$candidate"
+  fi
+
+  # Устанавливаем переменные с дефолтами, если их нет
+  API_PASSWORD="${NCM_API_PASSWORD:-$API_PASSWORD_DEFAULT}"
+  export API_PASSWORD
+
+  # HANDSHAKE можно задать через аргумент 2, либо через конфиг (NCM_HANDSHAKE_KEY)
+  if [[ -z "${HANDSHAKE:-}" && -n "${NCM_HANDSHAKE_KEY:-}" ]]; then
+    HANDSHAKE="$NCM_HANDSHAKE_KEY"
+  fi
+}
+
+install_prereqs() {
+  local pkgs=(openssl lsof)
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update -y
+    sudo apt-get install -y "${pkgs[@]}"
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y "${pkgs[@]}"
+  elif command -v yum >/dev/null 2>&1; then
+    sudo yum install -y "${pkgs[@]}"
+  elif command -v zypper >/dev/null 2>&1; then
+    sudo zypper install -y "${pkgs[@]}"
+  elif command -v apk >/dev/null 2>&1; then
+    sudo apk add --no-cache "${pkgs[@]}"
+  else
+    echo "Предупреждение: пакетный менеджер не найден; пропускаю установку зависимостей."
+  fi
+}
+
+write_systemd_unit() {
+  if command -v systemctl >/dev/null 2>&1; then
+    sudo tee /etc/systemd/system/nitrinonetcmanager.service >/dev/null <<'EOF'
+[Unit]
+Description=NITRINO NetC Manager
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/nitrinonetcmanager/ncm.env
+ExecStart=/usr/local/bin/nitrinonetcmanager
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo systemctl daemon-reload
+  fi
+}
+
 # Прочитать внешний конфиг (если указан/найден)
 read_installer_conf
 
