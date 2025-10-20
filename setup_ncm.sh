@@ -3,6 +3,8 @@ set -euo pipefail
 
 # Путь к бинарю можно передать первым аргументом, иначе ./nitrinonetcmanager
 BIN="${1:-./nitrinonetcmanager}"
+# Необязательный второй аргумент: общий handshake-ключ для всех агентов
+HANDSHAKE="${2:-}"
 
 API_PASSWORD="ys51Bi3P5OSIS48"
 
@@ -52,8 +54,12 @@ echo "[4/8] Запись API-пароля"
 echo "$API_PASSWORD" | sudo tee "$CONFIG_DIR/api.password" >/dev/null
 
 echo "[5/8] Генерация handshake ключа (ослаблю права для удобства curl)"
-# Для отладки сделаем 0644, чтобы текущий пользователь мог читать ключ.
-sudo sh -c "openssl rand -base64 32 > '$CONFIG_DIR/handshake.key'"
+# Если вы передали ключ вторым аргументом — используем его, иначе генерируем
+if [[ -n "$HANDSHAKE" ]]; then
+  echo "$HANDSHAKE" | sudo tee "$CONFIG_DIR/handshake.key" >/dev/null
+else
+  sudo sh -c "openssl rand -base64 32 > '$CONFIG_DIR/handshake.key'"
+fi
 sudo chmod 644 "$CONFIG_DIR/handshake.key"
 
 echo "[6/8] Генерация самоподписанного сертификата (c SAN)"
@@ -66,6 +72,8 @@ sudo openssl req -x509 -newkey rsa:2048 \
   -addext "subjectAltName=DNS:${HOST},DNS:localhost,IP:127.0.0.1"
 
 echo "[7/8] Создание файла окружения"
+# Если ключ передан — можно положить его в окружение напрямую, либо через файл.
+# Оставим единообразно через файл, чтобы работал hot-reload при замене содержимого.
 sudo tee "$ENV_FILE" >/dev/null <<EOF
 NCM_API_PASSWORD_FILE=$CONFIG_DIR/api.password
 NCM_HANDSHAKE_KEY_FILE=$CONFIG_DIR/handshake.key
@@ -130,6 +138,26 @@ stop() {
   fi
 }
 
+uninstall() {
+  echo "Остановка процесса и чистка файлов..."
+  # Остановить, удалить PID
+  stop || true
+  rm -f "$PID_FILE" || true
+
+  # Удалить конфиг, логи, состояние (включая hardware_uuid, сертификаты, ключи, ncm.env)
+  rm -rf "$CONFIG_DIR" || true
+  rm -rf "$LOG_DIR" || true
+  rm -rf "$STATE_DIR" || true
+
+  # Удалить бинарь
+  rm -f "/usr/local/bin/nitrinonetcmanager" || true
+
+  echo "Удаляю ncmctl..."
+  rm -f "/usr/local/bin/ncmctl" || true
+
+  echo "Готово: агент и все файлы удалены."
+}
+
 status() {
   if [[ -f "$PID_FILE" ]] && ps -p "$(cat "$PID_FILE")" >/dev/null 2>&1; then
     echo "Статус: запущен (PID $(cat "$PID_FILE"))"
@@ -145,12 +173,14 @@ case "$cmd" in
   stop) stop ;;
   restart) stop; start ;;
   status) status ;;
-  *) echo "Использование: ncmctl {start|stop|restart|status} [путь/к/бинарю]"; exit 1 ;;
+  uninstall) uninstall ;;
+  *) echo "Использование: ncmctl {start|stop|restart|status|uninstall} [путь/к/бинарю]"; exit 1 ;;
 esac
 EOF
 sudo chmod +x /usr/local/bin/ncmctl
 
 echo "Готово."
-echo "Управление: sudo ncmctl {start|stop|restart|status} [/путь/к/бинарю]"
+echo "Управление: sudo ncmctl {start|stop|restart|status|uninstall} [/путь/к/бинарю]"
+echo "Удаление: sudo ncmctl uninstall (очистит конфиги, логи, state и бинарь)"
 echo "Лог: $SERVICE_LOG"
 echo "PID: $PID_FILE"

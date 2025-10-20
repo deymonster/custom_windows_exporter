@@ -98,3 +98,91 @@ GOOS=linux GOARCH=amd64 go build -o bin/nitrinonetcmanager ./service
 ### Удаление службы
 
 1. Для удаления службы запустите NITRINOnetControlManager.msi снова или воспользуйтесь Панелью управления Windows.
+
+**Linux: деплой и запуск**
+
+- Установка через скрипт (копирует бинарь в `/usr/local/bin/nitrinonetcmanager`, генерирует секреты и запускает агент):
+```bash
+bash ./setup_ncm.sh ./bin/nitrinonetcmanager
+```
+
+- Управление агентом:
+```bash
+sudo ncmctl {start|stop|restart|status|uninstall}
+```
+
+- Проверка метрик (порт `9182`), требуется заголовок `X-Agent-Handshake-Key`:
+```bash
+curl -H "X-Agent-Handshake-Key: <ВАШ_КЛЮЧ>" http://<HOST>:9182/metrics
+```
+
+**Сборка для ARM64 (при необходимости)**
+
+- Если целевая машина — ARM (например, Raspberry Pi 4, AWS Graviton):
+```bash
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "-s -w" -o bin/nitrinonetcmanager ./service
+```
+
+### Настройка Handshake Key (Linux)
+
+- По умолчанию `setup_ncm.sh` генерирует ключ и записывает его в файл `NCM_HANDSHAKE_KEY_FILE=/etc/nitrinonetcmanager/handshake.key`.
+- Чтобы задать единый ключ для всех агентов, передайте его вторым аргументом при установке:
+```bash
+bash ./setup_ncm.sh ./bin/nitrinonetcmanager "<ЕДИНЫЙ_ШАРЕНЫЙ_КЛЮЧ>"
+```
+- Ключ читается менеджером секретов из переменных окружения:
+  - `NCM_HANDSHAKE_KEY_FILE` — путь к файлу с ключом (рекомендовано, поддерживается hot-reload при замене содержимого)
+  - или `NCM_HANDSHAKE_KEY` — ключ напрямую из окружения (меняется только при перезапуске процесса)
+- Метрики доступны только при наличии правильного заголовка:
+```bash
+curl -H "X-Agent-Handshake-Key: <ЕДИНЫЙ_ШАРЕНЫЙ_КЛЮЧ>" http://<HOST>:9182/metrics
+```
+
+### Обновление UUID после замены железа (Linux)
+
+- Агент хранит текущий UUID в `NCM_STATE_DIR/hardware_uuid` (по умолчанию `/var/lib/nitrinonetcmanager/hardware_uuid`).
+- Если состав железа изменился, метрика `UNIQUE_ID_CHANGED` станет `1`. Чтобы подтвердить изменения и записать новый UUID:
+```bash
+curl -k -u "<ТЕКУЩИЙ_UUID>:<API_ПАРОЛЬ>" https://<HOST>:9183/api/update-uuid
+```
+- Аутентификация:
+  - Логин: текущий UUID (считывается из `/var/lib/nitrinonetcmanager/hardware_uuid`)
+  - Пароль: берётся из `NCM_API_PASSWORD_FILE` (по умолчанию `/etc/nitrinonetcmanager/api.password`)
+- После успешного вызова:
+  - файл `hardware_uuid` обновляется
+  - `UNIQUE_ID_CHANGED` становится `0`
+  - `UNIQUE_ID_SYSTEM{uuid="..."} 1` отражает новый UUID
+
+### Конфигурация секретов (Linux)
+
+- API-пароль:
+  - `NCM_API_PASSWORD_FILE=/etc/nitrinonetcmanager/api.password`
+  - альтернативно: `NCM_API_PASSWORD` или `NCM_API_PASSWORD_HASH`/`NCM_API_PASSWORD_HASH_FILE` (SHA-256)
+- Handshake Key:
+  - `NCM_HANDSHAKE_KEY_FILE=/etc/nitrinonetcmanager/handshake.key`
+  - альтернативно: `NCM_HANDSHAKE_KEY`
+- Директория состояния:
+  - `NCM_STATE_DIR` (по умолчанию `/var/lib/nitrinonetcmanager`)
+  - хранит `hardware_uuid` и `ncm.pid`
+
+### Удаление агента (Linux)
+
+- Полная деинсталляция (останавливает процесс и удаляет бинарь, конфиги, логи, state):
+```bash
+sudo ncmctl uninstall
+```
+- После удаления можно повторно выполнить установку:
+```bash
+bash ./setup_ncm.sh ./bin/nitrinonetcmanager "<ЕДИНЫЙ_ШАРЕНЫЙ_КЛЮЧ>"
+```
+
+### Устранение неполадок (Linux)
+
+- “Бинарь не найден”: скопируйте бинарь в ожидаемый путь и перезапустите:
+```bash
+sudo cp ./bin/nitrinonetcmanager /usr/local/bin/nitrinonetcmanager && sudo chmod +x /usr/local/bin/nitrinonetcmanager && sudo ncmctl restart
+```
+- Проверить лог сервиса:
+```bash
+sudo tail -n 100 /var/log/nitrinonetcmanager/service.log
+```
