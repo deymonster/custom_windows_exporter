@@ -80,10 +80,14 @@ write_systemd_unit() {
 [Unit]
 Description=NITRINO NetC Manager
 After=network.target
+Requires=network-online.target
+After=network-online.target
 
 [Service]
 Type=simple
+WorkingDirectory=/etc/nitrinonetcmanager
 EnvironmentFile=/etc/nitrinonetcmanager/ncm.env
+ExecStartPre=/bin/bash -lc 'pids=$(lsof -t -i :9182 -i :9183 2>/dev/null || true); for pid in $pids; do if ps -o comm= -p "$pid" 2>/dev/null | grep -qx "nitrinonetcmanager"; then kill "$pid" || true; sleep 1; kill -9 "$pid" || true; fi; done'
 ExecStart=/usr/local/bin/nitrinonetcmanager
 Restart=always
 RestartSec=2
@@ -147,18 +151,28 @@ sudo openssl req -x509 -newkey rsa:2048 \
   -addext "subjectAltName=DNS:${HOST},DNS:localhost,IP:127.0.0.1"
 
 echo "[7/8] Создание файла окружения"
+# после записи ENV-файла
 sudo tee "$ENV_FILE" >/dev/null <<EOF
 NCM_API_PASSWORD_FILE=$CONFIG_DIR/api.password
 NCM_HANDSHAKE_KEY_FILE=$CONFIG_DIR/handshake.key
 NCM_CERT_DIR=$CERT_DIR
-NCM_LOG_DIR=$LOG_DIR
+NCM_LOG_FILE=$LOG_DIR/service.log
 NCM_STATE_DIR=$STATE_DIR
 EOF
 sudo chmod 644 "$ENV_FILE"
 
+# Создаём systemd unit и включаем автозапуск, если systemd доступен
+write_systemd_unit
+if command -v systemctl >/dev/null 2>&1; then
+  sudo systemctl enable --now nitrinonetcmanager || true
+fi
+
 echo "[8/8] Запуск агента с корректным окружением и создание ncmctl"
-# Запускаем в фоне, пишем PID и лог
-sudo bash -c "set -a; source '$ENV_FILE'; set +a; nohup '/usr/local/bin/nitrinonetcmanager' > '$SERVICE_LOG' 2>&1 & echo \$! > '$PID_FILE'"
+# блок [8/8] — запуск через nohup только если НЕТ systemd
+echo "[8/8] Запуск агента с корректным окружением и создание ncmctl"
+if ! command -v systemctl >/dev/null 2>&1; then
+  sudo bash -c "set -a; source '$ENV_FILE'; set +a; nohup '/usr/local/bin/nitrinonetcmanager' > '$SERVICE_LOG' 2>&1 & echo \$! > '$PID_FILE'"
+fi
 
 # Утилита управления
 sudo tee /usr/local/bin/ncmctl >/dev/null <<'EOF'
