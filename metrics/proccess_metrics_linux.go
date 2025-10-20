@@ -5,6 +5,7 @@ package metrics
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,16 +38,17 @@ func RecordProccessInfo() {
 
 			for _, proc := range processes {
 				pid := proc.Pid
-				name, err := proc.Name()
-				if err != nil || name == "" {
-					name = fmt.Sprintf("pid_%d", pid)
-				}
+				name := processName(proc, pid)
 
 				labels := prometheus.Labels{"process": name, "pid": fmt.Sprintf("%d", pid)}
 
-				if memInfo, err := proc.MemoryInfo(); err == nil {
+				if memInfo, err := proc.MemoryInfoEx(); err == nil {
 					rssMB := float64(memInfo.RSS) / (1024 * 1024)
-					privMB := float64(memInfo.VMS) / (1024 * 1024)
+					privateBytes := memInfo.RSS
+					if memInfo.Shared < memInfo.RSS {
+						privateBytes = memInfo.RSS - memInfo.Shared
+					}
+					privMB := float64(privateBytes) / (1024 * 1024)
 
 					ProccessMemoryUsage.With(labels).Set(rssMB)
 
@@ -94,4 +96,41 @@ func RecordProccessInfo() {
 			<-ticker.C
 		}
 	}()
+}
+
+func processName(proc *process.Process, pid int32) string {
+	name, err := proc.Name()
+	if err != nil {
+		name = ""
+	}
+
+	if sanitized := sanitizeProcessLabel(name); sanitized != "" {
+		return sanitized
+	}
+
+	if cmdline, err := proc.Cmdline(); err == nil {
+		if sanitized := sanitizeProcessLabel(cmdline); sanitized != "" {
+			return sanitized
+		}
+	}
+
+	return fmt.Sprintf("pid_%d", pid)
+}
+
+func sanitizeProcessLabel(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	if idx := strings.LastIndex(raw, "/"); idx >= 0 {
+		raw = raw[idx+1:]
+	}
+
+	if idx := strings.Index(raw, " "); idx > 0 {
+		raw = raw[:idx]
+	}
+
+	raw = strings.TrimSpace(raw)
+	return raw
 }

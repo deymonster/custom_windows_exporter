@@ -1,0 +1,92 @@
+name: Linux Installer (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.2.3)'
+        required: true
+      arch:
+        description: 'Target architecture'
+        required: true
+        type: choice
+        options:
+          - amd64
+          - arm64
+      api_password:
+        description: 'NCM API password'
+        required: true
+      handshake_key:
+        description: 'Handshake key for /metrics (X-Agent-Handshake-Key)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Mask inputs in logs
+        run: |
+          echo "::add-mask::${{ github.event.inputs.api_password }}"
+          echo "::add-mask::${{ github.event.inputs.handshake_key }}"
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Tidy
+        run: go mod tidy
+
+      - name: Build Linux (${{ github.event.inputs.arch }})
+        run: |
+          GOOS=linux GOARCH=${{ github.event.inputs.arch }} CGO_ENABLED=0 \
+          go build -o ./bin/nitrinonetcmanager ./service/main_linux.go
+
+      - name: Install makeself
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y makeself
+
+      - name: Prepare payload
+        run: |
+          mkdir -p dist/payload
+          cp ./bin/nitrinonetcmanager dist/payload/
+          cp ./setup_ncm.sh dist/payload/
+          # Встроим конфиг с введёнными паролями
+          cat > dist/payload/ncm_installer.conf <<EOF
+          NCM_API_PASSWORD=${{ github.event.inputs.api_password }}
+          NCM_HANDSHAKE_KEY=${{ github.event.inputs.handshake_key }}
+          EOF
+          chmod 600 dist/payload/ncm_installer.conf
+          # Обёртка, которая явно передаёт путь к конфигу в setup_ncm.sh
+          cat > dist/payload/setup.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          BIN_PATH="$PWD/nitrinonetcmanager"
+          CONFIG_FILE="$PWD/ncm_installer.conf"
+          chmod +x "$BIN_PATH"
+          # Передаём: [BIN] [HANDSHAKE] [CONFIG_FILE]; HANDSHAKE пусть пустой — читается из конфигурации
+          bash "$PWD/setup_ncm.sh" "$BIN_PATH" "" "$CONFIG_FILE"
+          echo "Installation finished. Use: sudo ncmctl start"
+          EOF
+          chmod +x dist/payload/setup.sh
+
+      - name: Make self-extracting installer
+        run: |
+          makeself dist/payload "ncm_install_linux_${{ github.event.inputs.arch }}.run" \
+            "NCM Linux Installer (${{ github.event.inputs.arch }})" ./setup.sh
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          files: ncm_install_linux_${{ github.event.inputs.arch }}.run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/host"
+    "strings"
 )
 
 func RecordCPUInfo() {
@@ -58,8 +59,12 @@ func RecordCPUInfo() {
 					if sensor.Temperature == 0 {
 						continue
 					}
+					label, ok := normalizeTempSensorLabel(sensor.SensorKey)
+					if !ok {
+						continue
+					}
 					CpuTemperature.With(prometheus.Labels{
-						"sensor": sensor.SensorKey,
+						"sensor": label,
 					}).Set(sensor.Temperature)
 				}
 			}
@@ -67,4 +72,35 @@ func RecordCPUInfo() {
 			<-ticker.C
 		}
 	}()
+}
+
+// helper: normalizeTempSensorLabel
+func normalizeTempSensorLabel(key string) (string, bool) {
+    k := strings.ToLower(strings.TrimSpace(key))
+    // отсекаем нерабочие метрики
+    if strings.Contains(k, "_crit") || strings.Contains(k, "_max") {
+        return "", false
+    }
+    // принимаем только *_input (рабочее значение)
+    if strings.HasSuffix(k, "_input") {
+        k = strings.TrimSuffix(k, "_input")
+    } else {
+        return "", false
+    }
+
+    switch {
+    case strings.HasPrefix(k, "coretemp_core"):
+        idx := strings.TrimPrefix(k, "coretemp_core")
+        return "core_" + idx, true
+    case strings.HasPrefix(k, "coretemp_packageid"):
+        pid := strings.TrimPrefix(k, "coretemp_packageid")
+        return "package_" + pid, true
+    case strings.HasPrefix(k, "acpitz"):
+        return "acpi_tz", true
+    case strings.HasPrefix(k, "pch_"):
+        return "pch", true
+    default:
+        // оставим нормализованный ключ как есть
+        return k, true
+    }
 }

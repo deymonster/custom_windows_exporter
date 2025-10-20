@@ -109,8 +109,27 @@ func RecordNetworkTraffic(prevStats map[string]net.IOCountersStat, currentStats 
 				NetworkRxBytesPerSecond.With(prometheus.Labels{"interface": name}).Set(rxRate)
 				NetworkTxBytesPerSecond.With(prometheus.Labels{"interface": name}).Set(txRate)
 
-				NetworkErrors.With(prometheus.Labels{"interface": name}).Add(float64(stat.Errin + stat.Errout))
-				NetworkDroppedPackets.With(prometheus.Labels{"interface": name}).Add(float64(stat.Dropin + stat.Dropout))
+				// корректные дельты без underflow для uint64
+				currErr := stat.Errin + stat.Errout
+				prevErr := prev.Errin + prev.Errout
+				var errDelta uint64
+				if currErr >= prevErr {
+					errDelta = currErr - prevErr
+				} else {
+					errDelta = 0
+				}
+
+				currDrop := stat.Dropin + stat.Dropout
+				prevDrop := prev.Dropin + prev.Dropout
+				var dropDelta uint64
+				if currDrop >= prevDrop {
+					dropDelta = currDrop - prevDrop
+				} else {
+					dropDelta = 0
+				}
+
+				NetworkErrors.With(prometheus.Labels{"interface": name}).Add(float64(errDelta))
+				NetworkDroppedPackets.With(prometheus.Labels{"interface": name}).Add(float64(dropDelta))
 			}
 			newStats[stat.Name] = stat
 		}
