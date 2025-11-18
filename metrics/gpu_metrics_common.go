@@ -18,4 +18,12 @@ var (
 		},
 		[]string{"name"},
 	)
+
+	GpuType = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "gpu_type_info",
+			Help: "GPU type classification: integrated/discrete/unknown",
+		},
+		[]string{"name", "type"},
+	)
 )

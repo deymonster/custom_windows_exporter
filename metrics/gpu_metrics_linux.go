@@ -17,85 +17,89 @@ import (
 type gpuDevice struct {
 	Name        string
 	MemoryBytes uint64
+	Type        string
 }
 
 func RecordGpuInfo() {
 	devices := discoverGPUDevices()
 	if len(devices) == 0 {
 		log.Printf("no GPU entries found under /sys/class/drm; exposing placeholder metric")
-		devices = []gpuDevice{{Name: "unknown", MemoryBytes: 0}}
+		devices = []gpuDevice{{Name: "unknown", MemoryBytes: 0, Type: "unknown"}}
 	}
 
 	for _, device := range devices {
 		GpuInfo.With(prometheus.Labels{"name": device.Name}).Set(1)
 		GpuMemory.With(prometheus.Labels{"name": device.Name}).Set(float64(device.MemoryBytes))
+		GpuType.With(prometheus.Labels{"name": device.Name, "type": device.Type}).Set(1)
 	}
 }
 
+// определение устройств c типом
 func discoverGPUDevices() []gpuDevice {
-	busNames := parseLspciGPUInfo()
-	nvidiaMemory := queryNvidiaSMIMemory()
+    busNames := parseLspciGPUInfo()
+    nvidiaMemory := queryNvidiaSMIMemory()
 
-	entries, err := os.ReadDir("/sys/class/drm")
-	if err != nil {
-		return nil
-	}
+    entries, err := os.ReadDir("/sys/class/drm")
+    if err != nil {
+        return nil
+    }
 
-	var devices []gpuDevice
-	seen := make(map[string]struct{})
+    var devices []gpuDevice
+    seen := make(map[string]struct{})
 
-	for _, entry := range entries {
-		name := entry.Name()
-		if !strings.HasPrefix(name, "card") || strings.Contains(name, "-") {
-			continue
-		}
+    for _, entry := range entries {
+        name := entry.Name()
+        if !strings.HasPrefix(name, "card") || strings.Contains(name, "-") {
+            continue
+        }
 
-		deviceDir := filepath.Join("/sys/class/drm", name, "device")
-		resolved, err := filepath.EvalSymlinks(deviceDir)
-		if err != nil {
-			continue
-		}
+        deviceDir := filepath.Join("/sys/class/drm", name, "device")
+        resolved, err := filepath.EvalSymlinks(deviceDir)
+        if err != nil {
+            continue
+        }
 
-		busID := normalizePCIBusID(filepath.Base(resolved))
-		if busID == "" {
-			continue
-		}
+        busID := normalizePCIBusID(filepath.Base(resolved))
+        if busID == "" {
+            continue
+        }
 
-		if _, ok := seen[busID]; ok {
-			continue
-		}
-		seen[busID] = struct{}{}
+        if _, ok := seen[busID]; ok {
+            continue
+        }
+        seen[busID] = struct{}{}
 
-		label := busNames[busID]
-		if label == "" {
-			vendor := strings.TrimPrefix(readSysfsValue(filepath.Join(deviceDir, "vendor")), "0x")
-			device := strings.TrimPrefix(readSysfsValue(filepath.Join(deviceDir, "device")), "0x")
-			label = strings.TrimSpace(fmt.Sprintf("PCI %s:%s", vendor, device))
-			if label == "" {
-				label = name
-			}
-		}
+        label := busNames[busID]
+        if label == "" {
+            vendor := strings.TrimPrefix(readSysfsValue(filepath.Join(deviceDir, "vendor")), "0x")
+            device := strings.TrimPrefix(readSysfsValue(filepath.Join(deviceDir, "device")), "0x")
+            label = strings.TrimSpace(fmt.Sprintf("PCI %s:%s", vendor, device))
+            if label == "" {
+                label = name
+            }
+        }
 
-		memory := gpuMemoryFromSysfs(deviceDir)
-		if memory == 0 {
-			if value, ok := nvidiaMemory[busID]; ok {
-				memory = value
-			}
-		}
-		if memory == 0 {
-			memory = gpuMemoryFromLspci(busID)
-		}
+        memory := gpuMemoryFromSysfs(deviceDir)
+        if memory == 0 {
+            if value, ok := nvidiaMemory[busID]; ok {
+                memory = value
+            }
+        }
+        if memory == 0 {
+            memory = gpuMemoryFromLspci(busID)
+        }
 
-		devices = append(devices, gpuDevice{Name: label, MemoryBytes: memory})
-	}
+        typ := classifyGPUType(deviceDir, label)
+        devices = append(devices, gpuDevice{Name: label, MemoryBytes: memory, Type: typ})
+    }
 
-	if len(devices) == 0 && len(busNames) > 0 {
-		for _, name := range busNames {
-			devices = append(devices, gpuDevice{Name: name, MemoryBytes: 0})
-		}
-	}
+    if len(devices) == 0 && len(busNames) > 0 {
+        for _, name := range busNames {
+            devices = append(devices, gpuDevice{Name: name, MemoryBytes: 0, Type: "unknown"})
+        }
+    }
 
-	return devices
+    return devices
 }
 
 func parseLspciGPUInfo() map[string]string {
@@ -349,4 +353,51 @@ func normalizePCIBusID(id string) string {
 	}
 
 	return trimmed
+}
+
+// функции классификации
+func classifyGPUType(deviceDir, label string) string {
+    vendorHex := strings.TrimPrefix(readSysfsValue(filepath.Join(deviceDir, "vendor")), "0x")
+    v := strings.ToLower(strings.TrimSpace(vendorHex))
+    name := strings.ToLower(label)
+
+    if v == "8086" || strings.Contains(name, "intel") {
+        return "integrated"
+    }
+    if v == "10de" || strings.Contains(name, "nvidia") {
+        return "discrete"
+    }
+    if v == "1002" || strings.Contains(name, "amd") || strings.Contains(name, "radeon") {
+        if hasDedicatedMemory(deviceDir) {
+            return "discrete"
+        }
+        return "integrated"
+    }
+
+    if hasDedicatedMemory(deviceDir) {
+        return "discrete"
+    }
+    return "unknown"
+}
+
+func hasDedicatedMemory(deviceDir string) bool {
+    // Наличие файлов про выделенную VRAM часто у дискретных адаптеров
+    candidates := []string{
+        "mem_info_vram_total",
+        "mem_info_vis_vram_total",
+        "mem_info_dedicated_total",
+        "total_vram",
+        "vram_total",
+        "local_memory_size",
+    }
+    for _, c := range candidates {
+        val := readSysfsValue(filepath.Join(deviceDir, c))
+        if val == "" {
+            continue
+        }
+        if bytes, ok := parseNumericValue(val); ok && bytes > 0 {
+            return true
+        }
+    }
+    return false
 }

@@ -25,6 +25,7 @@ func New() *Collector {
 	}
 }
 
+// метод RegisterMetrics: добавляем регистрацию новой метрики
 func (c *Collector) RegisterMetrics(reg prometheus.Registerer) error {
 	if err := mockconfig.Load(); err != nil {
 		return fmt.Errorf("failed to load mock config: %w", err)
@@ -79,6 +80,7 @@ func (c *Collector) RegisterMetrics(reg prometheus.Registerer) error {
 	reg.MustRegister(metrics.NetworkDroppedPackets)
 	reg.MustRegister(metrics.GpuInfo)
 	reg.MustRegister(metrics.GpuMemory)
+	reg.MustRegister(metrics.GpuType)
 	reg.MustRegister(metrics.MotherboardInfo)
 	reg.MustRegister(metrics.SystemInfo)
 	reg.MustRegister(metrics.SystemUptime)
