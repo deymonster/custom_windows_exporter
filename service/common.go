@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
+	"runtime"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -218,6 +218,9 @@ func startHTTPServer(ctx context.Context, coll collector.Interface, logger *serv
 func resolveCertDir() string {
 	if dir := strings.TrimSpace(os.Getenv("NCM_CERT_DIR")); dir != "" {
 		return dir
+	}
+	if runtime.GOOS == "windows" {
+		return `C:\ProgramData\NITRINOnetControlManager\certs`
 	}
 	return "configs/certs"
 }
