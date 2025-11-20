@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -196,8 +197,18 @@ func readSecret(envKey, fileEnv string) (string, string, error) {
 		return value, file, err
 	}
 
-	value := strings.TrimSpace(os.Getenv(envKey))
-	return value, "", nil
+	if value := strings.TrimSpace(os.Getenv(envKey)); value != "" {
+		return value, "", nil
+	}
+
+	// Fallback: default Windows/Linux path
+	p := defaultHandshakeKeyPath()
+	if fileExists(p) {
+		value, err := readFileSecret(p)
+		return value, p, err
+	}
+
+	return "", "", nil
 }
 
 func readPassword() (hash string, passwordFile, hashFile string, err error) {
@@ -220,6 +231,19 @@ func readPassword() (hash string, passwordFile, hashFile string, err error) {
 
 	if value := strings.TrimSpace(os.Getenv("NCM_API_PASSWORD")); value != "" {
 		return hashPassword(value), "", "", nil
+	}
+
+	// Fallback: default Windows/Linux files
+	if p := defaultAPIHashPath(); fileExists(p) {
+		value, err := readFileSecret(p)
+		return strings.ToLower(value), "", p, err
+	}
+	if p := defaultAPIPasswordPath(); fileExists(p) {
+		value, err := readFileSecret(p)
+		if err != nil {
+			return "", p, "", err
+		}
+		return hashPassword(value), p, "", nil
 	}
 
 	return "", "", "", errors.New("API password not configured")
@@ -250,4 +274,28 @@ func (m *Manager) Close() error {
 		delete(m.watchers, path)
 	}
 	return firstErr
+}
+
+func defaultProgramDataDir() string {
+	if runtime.GOOS == "windows" {
+		return `C:\ProgramData\NITRINOnetControlManager`
+	}
+	return `/etc/nitrinonetcmanager`
+}
+
+func defaultHandshakeKeyPath() string {
+	return filepath.Join(defaultProgramDataDir(), "handshake.key")
+}
+
+func defaultAPIPasswordPath() string {
+	return filepath.Join(defaultProgramDataDir(), "api.password")
+}
+
+func defaultAPIHashPath() string {
+	return filepath.Join(defaultProgramDataDir(), "api.password.sha256")
+}
+
+func fileExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
 }
