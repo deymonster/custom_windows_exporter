@@ -70,8 +70,8 @@ begin
   CredentialsPage.Add('API Password:', False);
 
   // Предзаполнение из командной строки для тихой установки
-  HandshakeKey := GetCmdLineParam('HANDSHAKE');
-  ApiPassword := GetCmdLineParam('API_PASSWORD');
+  HandshakeKey := ExpandConstant('{param:HANDSHAKE|}');
+  ApiPassword := ExpandConstant('{param:API_PASSWORD|}');
   if HandshakeKey <> '' then CredentialsPage.Values[0] := HandshakeKey;
   if ApiPassword <> '' then CredentialsPage.Values[1] := ApiPassword;
 end;
