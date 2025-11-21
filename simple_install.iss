@@ -131,4 +131,4 @@ begin
     if ApiPassword <> '' then
       SaveStringToFile(PasswordPath, ApiPassword, False);
   end;
-end
+end;
