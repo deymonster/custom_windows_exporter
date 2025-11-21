@@ -40,33 +40,41 @@ jobs:
         run: |
           choco install innosetup --no-progress --yes
           
-      # Сборка исполняемых файлов для упаковки Inno Setup
       - name: Build Main Service Executable
         run: go build -o NITRINOnetControlManager.exe ./service
 
       - name: Build Remove Service Executable
         run: go build -o remove_service.exe ./uninstall
 
-      # Пробрасываем версию из тега/инпута в Inno Setup
       - name: Set version string from tag or input
         shell: pwsh
         run: |
           $ver = "${{ github.ref_name }}"
           if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "${{ github.event.inputs.version }}" }
-          # Строковая версия (может оставаться с 'v')
+          # Строковая версия (может быть с 'v')
           $appVer = $ver
-          # Файловая версия: числовая, 4 части
+          # Файловая версия: числовая, 4 части (отрезаем всё, кроме цифр и точек)
           $fv = $ver.TrimStart('v')
-          $parts = $fv.Split('.')
+          $fv = ($fv -replace '[^0-9\.]', '')
+          $parts = $fv.Split('.').Where({ $_ -ne '' })
           while ($parts.Length -lt 4) { $parts += '0' }
+          if ($parts.Length -gt 4) { $parts = $parts[0..3] }
           $fv4 = [string]::Join('.', $parts)
+          if ([string]::IsNullOrWhiteSpace($appVer)) { $appVer = "v0.0.0" }
+          if ([string]::IsNullOrWhiteSpace($fv4))    { $fv4 = "0.0.0.0" }
           "APP_VER=$appVer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "FILE_VER=$fv4"  | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build InnoSetup Installer
         shell: cmd
         run: |
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="%APP_VER%" /DMyAppFileVersion="%FILE_VER%" simple_install.iss
+          echo APP_VER=%APP_VER%
+          echo FILE_VER=%FILE_VER%
+          if not "%FILE_VER%"=="" (
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="%APP_VER%" /DMyAppFileVersion="%FILE_VER%" simple_install.iss
+          ) else (
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="%APP_VER%" simple_install.iss
+          )
 
       - name: Debug List files in workspace
         run: |
