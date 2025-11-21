@@ -1,4 +1,5 @@
 ; Install script for NITRINOnet Control Manager (Шаг 1: Простой установщик файлов)
+; Stored with Windows (CRLF) line endings for Inno Setup compatibility.
 
 ; Параметризуем версию установщика через препроцессор
 #ifndef MyAppVersion
