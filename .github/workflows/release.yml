@@ -22,7 +22,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-     
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
@@ -41,17 +40,33 @@ jobs:
         run: |
           choco install innosetup --no-progress --yes
           
+      # Сборка исполняемых файлов для упаковки Inno Setup
       - name: Build Main Service Executable
         run: go build -o NITRINOnetControlManager.exe ./service
 
       - name: Build Remove Service Executable
         run: go build -o remove_service.exe ./uninstall
 
+      # Пробрасываем версию из тега/инпута в Inno Setup
+      - name: Set version string from tag or input
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "${{ github.event.inputs.version }}" }
+          # Строковая версия (может оставаться с 'v')
+          $appVer = $ver
+          # Файловая версия: числовая, 4 части
+          $fv = $ver.TrimStart('v')
+          $parts = $fv.Split('.')
+          while ($parts.Length -lt 4) { $parts += '0' }
+          $fv4 = [string]::Join('.', $parts)
+          "APP_VER=$appVer" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "FILE_VER=$fv4"  | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build InnoSetup Installer
-        run: |
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" simple_install.iss
         shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="%APP_VER%" /DMyAppFileVersion="%FILE_VER%" simple_install.iss
 
       - name: Debug List files in workspace
         run: |

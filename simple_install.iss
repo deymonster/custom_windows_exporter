@@ -1,7 +1,18 @@
 ; Install script for NITRINOnet Control Manager (Шаг 1: Простой установщик файлов)
+
+; Параметризуем версию установщика через препроцессор
+#ifndef MyAppVersion
+  #define MyAppVersion "dev"
+#endif
+#ifndef MyAppFileVersion
+  #define MyAppFileVersion "0.0.0.0"
+#endif
+
 [Setup]
 AppName=NITRINOnet Control Manager
-AppVersion=1.0.10
+AppVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppFileVersion}
+VersionInfoTextVersion={#MyAppVersion}
 DefaultDirName={pf}\NITRINOnet Control Manager
 DefaultGroupName=NITRINOnet Control Manager
 OutputDir=.
