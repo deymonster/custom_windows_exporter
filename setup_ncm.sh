@@ -99,29 +99,36 @@ EOF
   fi
 }
 
+stop_existing_agent() {
+  if command -v systemctl >/dev/null 2>&1 && sudo systemctl is-active --quiet nitrinonetcmanager; then
+    echo "[1/8] Остановка существующей службы nitrinonetcmanager"
+    sudo systemctl stop nitrinonetcmanager
+  fi
+
+  # Do not kill arbitrary applications merely because they use a monitoring
+  # port. A different owner is a deployment error that needs attention.
+  local listener
+  listener="$(sudo lsof -t -iTCP:9182 -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$listener" ]]; then
+    echo "Порт 9182 всё ещё занят процессом: $listener" >&2
+    echo "Остановите конфликтующую службу и повторите установку." >&2
+    exit 1
+  fi
+}
+
 # Прочитать внешний конфиг (если указан/найден)
 read_installer_conf
-
-# Устанавливаем бинарь в стандартное место, чтобы ncmctl работал без аргументов
-sudo cp "$BIN" /usr/local/bin/nitrinonetcmanager
-sudo chmod +x /usr/local/bin/nitrinonetcmanager
 
 # Установка зависимостей кросс-дистрибутивно
 install_prereqs
 
-echo "[2/8] Остановка процессов, занявших порты 9182/9183"
-PIDS=$(sudo lsof -t -i :9182 -i :9183 || true)
-if [[ -n "${PIDS}" ]]; then
-  echo "Нашёл процессы: ${PIDS}. Посылаю SIGTERM..."
-  sudo kill ${PIDS} || true
-  sleep 1
-  # Если кто-то ещё жив — добиваю
-  SURVIVORS=$(sudo lsof -t -i :9182 -i :9183 || true)
-  if [[ -n "${SURVIVORS}" ]]; then
-    echo "Процессы всё ещё держат порт, посылаю SIGKILL: ${SURVIVORS}"
-    sudo kill -9 ${SURVIVORS} || true
-  fi
-fi
+# On upgrade the executable is in use by the running service. Stop it before
+# copying the replacement; otherwise Linux returns ETXTBSY (Text file busy).
+stop_existing_agent
+
+# Устанавливаем бинарь в стандартное место, чтобы ncmctl работал без аргументов
+sudo cp "$BIN" /usr/local/bin/nitrinonetcmanager
+sudo chmod +x /usr/local/bin/nitrinonetcmanager
 
 echo "[3/8] Создание каталогов"
 sudo mkdir -p "$CONFIG_DIR" "$CERT_DIR" "$LOG_DIR" "$STATE_DIR"
