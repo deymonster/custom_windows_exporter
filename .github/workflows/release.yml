@@ -1,18 +1,18 @@
-name: Build and release
+name: Build agent releases
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version for manual release"
-        required: true
-        default: "v1.0.0"
+        description: "Version label for a manual test build (does not publish a release)"
+        required: false
+        default: "dev"
   push:
     tags:
       - "v*"
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
     permissions:
       actions: write
@@ -27,8 +27,8 @@ jobs:
         with:
           go-version: "1.23"
 
-      - name: Install dependencies
-        run: go mod tidy
+      - name: Download dependencies
+        run: go mod download
 
       # Generate certs
       - name: Generate certificates
@@ -99,32 +99,88 @@ jobs:
           name: NITRINOnetControlManagerSetup
           path: NITRINOnetControlManagerSetup.exe
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          files: ${{ github.workspace }}/NITRINOnetControlManagerSetup.exe
+          go-version: '1.23'
+
+      - name: Download dependencies and test
+        run: |
+          go mod download
+          GOOS=linux GOARCH=amd64 go test ./...
+
+      - name: Build Linux agent
+        run: |
+          mkdir -p dist/payload
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build -trimpath -ldflags='-s -w' \
+            -o dist/payload/nitrinonetcmanager ./service
+          cp setup_ncm.sh dist/payload/setup_ncm.sh
+          cat > dist/payload/setup.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          # The secret is deliberately not stored in this release. Obtain the
+          # panel handshake key from the administrator and pass it at install.
+          exec bash "$PWD/setup_ncm.sh" "$PWD/nitrinonetcmanager" "${NCM_HANDSHAKE_KEY:-}"
+          EOF
+          chmod +x dist/payload/setup.sh dist/payload/setup_ncm.sh
+
+      - name: Build self-extracting installer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y makeself
+          makeself dist/payload hw-monitor-agent-linux-amd64.run \
+            'HW Monitor Linux Agent (amd64)' ./setup.sh
+
+      - name: Upload Linux installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: hw-monitor-agent-linux-amd64
+          path: hw-monitor-agent-linux-amd64.run
+
+  release:
+    needs: [build-windows, build-linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Create manifest and checksums
+        working-directory: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN  }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          windows_file=NITRINOnetControlManagerSetup.exe
+          linux_file=hw-monitor-agent-linux-amd64.run
+          windows_sha=$(sha256sum "$windows_file" | awk '{print $1}')
+          linux_sha=$(sha256sum "$linux_file" | awk '{print $1}')
+          cat > manifest.json <<EOF
+          {"agents":[
+            {"id":"windows-amd64","platform":"windows","architecture":"amd64","version":"${VERSION}","file":"${windows_file}","sha256":"${windows_sha}","installer":"${windows_file}"},
+            {"id":"linux-amd64","platform":"linux","architecture":"amd64","version":"${VERSION}","file":"${linux_file}","sha256":"${linux_sha}","installer":"sudo env NCM_HANDSHAKE_KEY='<ключ панели>' ./${linux_file}"}
+          ]}
+          EOF
+          sha256sum "$windows_file" "$linux_file" manifest.json > SHA256SUMS
 
-      - name: CleanUp Artifacts
-        if: always()
-        uses: actions/github-script@v7
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
         with:
-          script: |
-            const response = await github.rest.actions.listArtifactsForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
-            for (const artifact of response.data.artifacts) {
-              if (artifact.name === 'NITRINOnetControlManagerSetup') {
-                console.log('Deleting artifact:', artifact.name);
-                await github.rest.actions.deleteArtifact({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  artifact_id: artifact.id
-                });
-              }
-            }
-        
-
+          files: |
+            release/NITRINOnetControlManagerSetup.exe
+            release/hw-monitor-agent-linux-amd64.run
+            release/manifest.json
+            release/SHA256SUMS
