@@ -201,6 +201,19 @@ jobs:
           EOF
           sha256sum "$windows_file" "$windows_msi_file" "$linux_file" manifest.json > SHA256SUMS
 
+      - name: Bundle agents for panel installation
+        working-directory: release
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          tar -czf "hw-monitor-agents-${VERSION}.tar.gz" \
+            NITRINOnetControlManagerSetup.exe \
+            HWMonitorAgent.msi \
+            hw-monitor-agent-linux-amd64.run \
+            manifest.json \
+            SHA256SUMS
+          sha256sum "hw-monitor-agents-${VERSION}.tar.gz" >> SHA256SUMS
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -210,3 +223,4 @@ jobs:
             release/hw-monitor-agent-linux-amd64.run
             release/manifest.json
             release/SHA256SUMS
+            release/hw-monitor-agents-*.tar.gz
