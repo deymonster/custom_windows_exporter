@@ -47,7 +47,7 @@
 						Program="[#AgentExecutable]" />
 				</Component>
 				<Component Id="ConfigurationScriptComponent" Bitness="always64" Guid="*">
-					<File Id="ConfigureAgentScript" Source="Configure-HWMonitorAgent.ps1" KeyPath="yes" />
+					<File Id="ConfigureAgentScript" Source="installer/msi/Configure-HWMonitorAgent.ps1" KeyPath="yes" />
 				</Component>
 			</Directory>
 		</StandardDirectory>
