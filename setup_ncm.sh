@@ -8,8 +8,6 @@ HANDSHAKE="${2:-}"
 # Необязательный третий аргумент: путь к внешнему конфигу установщика (если не задан - автопоиск)
 CONFIG_FILE="${3:-}"
 
-API_PASSWORD_DEFAULT="ys51Bi3P5OSIS48"
-
 CONFIG_DIR="/etc/nitrinonetcmanager"
 CERT_DIR="$CONFIG_DIR/certs"
 LOG_DIR="/var/log/nitrinonetcmanager"
@@ -47,7 +45,12 @@ read_installer_conf() {
   fi
 
   # Устанавливаем переменные с дефолтами, если их нет
-  API_PASSWORD="${NCM_API_PASSWORD:-$API_PASSWORD_DEFAULT}"
+  # Do not ship a shared API password. A caller may supply one through the
+  # installer config; otherwise generate a unique value for this host.
+  API_PASSWORD="${NCM_API_PASSWORD:-}"
+  if [[ -z "$API_PASSWORD" ]]; then
+    API_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+  fi
   export API_PASSWORD
 
   # HANDSHAKE можно задать через аргумент 2, либо через конфиг (NCM_HANDSHAKE_KEY)
@@ -130,13 +133,14 @@ stop_existing_agent
 sudo cp "$BIN" /usr/local/bin/nitrinonetcmanager
 sudo chmod +x /usr/local/bin/nitrinonetcmanager
 
-echo "[3/8] Создание каталогов"
+echo "[2/8] Создание каталогов"
 sudo mkdir -p "$CONFIG_DIR" "$CERT_DIR" "$LOG_DIR" "$STATE_DIR"
 
-echo "[4/8] Запись API-пароля"
+echo "[3/8] Запись API-пароля"
 echo "${API_PASSWORD}" | sudo tee "$CONFIG_DIR/api.password" >/dev/null
+sudo chmod 600 "$CONFIG_DIR/api.password"
 
-echo "[5/8] Генерация/задание handshake ключа"
+echo "[4/8] Генерация/задание handshake ключа"
 if [[ -n "$HANDSHAKE" ]]; then
   echo "$HANDSHAKE" | sudo tee "$CONFIG_DIR/handshake.key" >/dev/null
 else
@@ -146,9 +150,9 @@ else
     sudo sh -c "openssl rand -base64 32 > '$CONFIG_DIR/handshake.key'"
   fi
 fi
-sudo chmod 644 "$CONFIG_DIR/handshake.key"
+sudo chmod 600 "$CONFIG_DIR/handshake.key"
 
-echo "[6/8] Генерация самоподписанного сертификата (c SAN)"
+echo "[5/8] Генерация самоподписанного сертификата (c SAN)"
 HOST="$(hostname)"
 sudo openssl req -x509 -newkey rsa:2048 \
   -keyout "$CERT_DIR/key.pem" \
@@ -156,8 +160,10 @@ sudo openssl req -x509 -newkey rsa:2048 \
   -days 365 -nodes \
   -subj "/CN=${HOST}" \
   -addext "subjectAltName=DNS:${HOST},DNS:localhost,IP:127.0.0.1"
+sudo chmod 600 "$CERT_DIR/key.pem"
+sudo chmod 644 "$CERT_DIR/cert.pem"
 
-echo "[7/8] Создание файла окружения"
+echo "[6/8] Создание файла окружения"
 # после записи ENV-файла
 sudo tee "$ENV_FILE" >/dev/null <<EOF
 NCM_API_PASSWORD_FILE=$CONFIG_DIR/api.password
@@ -166,7 +172,7 @@ NCM_CERT_DIR=$CERT_DIR
 NCM_LOG_FILE=$LOG_DIR/service.log
 NCM_STATE_DIR=$STATE_DIR
 EOF
-sudo chmod 644 "$ENV_FILE"
+sudo chmod 600 "$ENV_FILE"
 
 # Создаём systemd unit и включаем автозапуск, если systemd доступен
 write_systemd_unit
@@ -174,9 +180,9 @@ if command -v systemctl >/dev/null 2>&1; then
   sudo systemctl enable --now nitrinonetcmanager || true
 fi
 
-echo "[8/8] Запуск агента с корректным окружением и создание ncmctl"
+echo "[7/8] Запуск агента с корректным окружением и создание ncmctl"
 # блок [8/8] — запуск через nohup только если НЕТ systemd
-echo "[8/8] Запуск агента с корректным окружением и создание ncmctl"
+echo "[7/8] Запуск агента с корректным окружением и создание ncmctl"
 if ! command -v systemctl >/dev/null 2>&1; then
   sudo bash -c "set -a; source '$ENV_FILE'; set +a; nohup '/usr/local/bin/nitrinonetcmanager' > '$SERVICE_LOG' 2>&1 & echo \$! > '$PID_FILE'"
 fi
