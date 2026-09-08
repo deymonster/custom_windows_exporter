@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
           go-version: "1.23"
 
@@ -114,7 +114,7 @@ jobs:
         shell: cmd
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: NITRINOnetControlManagerSetup
           path: |
@@ -126,10 +126,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.23'
 
@@ -162,7 +162,7 @@ jobs:
             'HW Monitor Linux Agent (amd64)' ./setup.sh
 
       - name: Upload Linux installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: hw-monitor-agent-linux-amd64
           path: hw-monitor-agent-linux-amd64.run
@@ -176,7 +176,7 @@ jobs:
 
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: release
           merge-multiple: true
@@ -215,7 +215,7 @@ jobs:
           sha256sum "hw-monitor-agents-${VERSION}.tar.gz" >> SHA256SUMS
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release/NITRINOnetControlManagerSetup.exe
