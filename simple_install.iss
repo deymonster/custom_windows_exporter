@@ -40,13 +40,11 @@ Name: "{group}\Uninstall NITRINOnet Control Manager"; Filename: "{uninstallexe}"
 Filename: "sc"; Parameters: "create NITRINOnetControlManager binPath= ""{app}\NITRINOnetControlManager.exe"" DisplayName= ""NITRINOnet Control Manager"" start= auto"; Flags: runhidden
 Filename: "sc"; Parameters: "start NITRINOnetControlManager"; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""NITRINOnet Control Manager Port 9182"" protocol=TCP dir=in localport=9182 action=allow"; Flags: runhidden
-Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""NITRINOnet Control Manager API Port 9183"" protocol=TCP dir=in localport=9183 action=allow"; Flags: runhidden
 
 [UninstallRun]
 Filename: "sc"; Parameters: "stop NITRINOnetControlManager"; Flags: runhidden
 Filename: "sc"; Parameters: "delete NITRINOnetControlManager"; Flags: runhidden
 Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""NITRINOnet Control Manager Port 9182"""; Flags: runhidden
-Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""NITRINOnet Control Manager API Port 9183"""; Flags: runhidden
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\EventLog\Application\NITRINOnetControlManager"; ValueType: string; ValueName: "EventMessageFile"; ValueData: "{app}\NITRINOnetControlManager.exe"; Flags: uninsdeletevalue
@@ -56,25 +54,22 @@ Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Services\EventLog\Application\NITR
 var
   CredentialsPage: TInputQueryWizardPage;
   HandshakeKey: string;
-  ApiPassword: string;
 
 procedure InitializeWizard();
 begin
-  // Страница ввода секретов
+  // The panel handshake key is the only value an administrator provides.
+  // The local API password is generated on this computer during installation.
   CredentialsPage := CreateInputQueryPage(
     wpSelectTasks,
     'Параметры агента',
-    'Handshake Key и API Password',
-    'Введите общий Handshake Key и пароль API (будут записаны в ProgramData).'
+    'Подключение к панели',
+    'Введите Handshake Key, выданный администратором панели.'
   );
   CredentialsPage.Add('Handshake Key:', False);
-  CredentialsPage.Add('API Password:', False);
 
-  // Предзаполнение из командной строки для тихой установки
+  // Pre-fill from the command line for unattended installation.
   HandshakeKey := ExpandConstant('{param:HANDSHAKE|}');
-  ApiPassword := ExpandConstant('{param:API_PASSWORD|}');
   if HandshakeKey <> '' then CredentialsPage.Values[0] := HandshakeKey;
-  if ApiPassword <> '' then CredentialsPage.Values[1] := ApiPassword;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -83,34 +78,39 @@ begin
   if CurPageID = CredentialsPage.ID then
   begin
     HandshakeKey := Trim(CredentialsPage.Values[0]);
-    ApiPassword  := Trim(CredentialsPage.Values[1]);
 
-    if WizardSilent then
+    if HandshakeKey = '' then
     begin
-      // В тихом режиме значения должны прийти параметрами /HANDSHAKE и /API_PASSWORD
-      if (HandshakeKey = '') or (ApiPassword = '') then
-      begin
-        MsgBox('Для тихой установки задайте параметры /HANDSHAKE и /API_PASSWORD.', mbError, MB_OK);
-        Result := False;
-        exit;
-      end;
-    end
-    else
-    begin
-      if HandshakeKey = '' then
-      begin
+      if WizardSilent then
+        MsgBox('Для тихой установки задайте параметр /HANDSHAKE.', mbError, MB_OK)
+      else
         MsgBox('Введите Handshake Key.', mbError, MB_OK);
-        Result := False;
-        exit;
-      end;
-      if ApiPassword = '' then
-      begin
-        MsgBox('Введите API Password.', mbError, MB_OK);
-        Result := False;
-        exit;
-      end;
+      Result := False;
+      exit;
     end;
   end;
+end;
+
+function GenerateApiPassword(const PasswordPath: string): Boolean;
+var
+  ExitCode: Integer;
+  PowerShell: string;
+begin
+  PowerShell := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  Result := Exec(
+    PowerShell,
+    '-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$bytes=New-Object byte[] 32;[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes);$value=([System.BitConverter]::ToString($bytes)).Replace(''-'', '''').ToLowerInvariant();[System.IO.File]::WriteAllText(''' + PasswordPath + ''',$value+[Environment]::NewLine,(New-Object System.Text.UTF8Encoding($false)))"',
+    '', SW_HIDE, ewWaitUntilTerminated, ExitCode) and (ExitCode = 0);
+end;
+
+procedure RestrictSecretFile(const SecretPath: string);
+var
+  ExitCode: Integer;
+begin
+  if not Exec(ExpandConstant('{sys}\icacls.exe'),
+    '"' + SecretPath + '" /inheritance:r /grant:r "*S-1-5-18:(F)" "*S-1-5-32-544:(F)"',
+    '', SW_HIDE, ewWaitUntilTerminated, ExitCode) or (ExitCode <> 0) then
+    RaiseException('Не удалось ограничить доступ к локальному API-password.');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -129,7 +129,12 @@ begin
     if HandshakeKey <> '' then
       SaveStringToFile(HandshakePath, HandshakeKey, False);
 
-    if ApiPassword <> '' then
-      SaveStringToFile(PasswordPath, ApiPassword, False);
+    // Keep the existing secret during upgrades; create it only for a new agent.
+    if not FileExists(PasswordPath) then
+    begin
+      if not GenerateApiPassword(PasswordPath) then
+        RaiseException('Не удалось создать локальный API-password.');
+    end;
+    RestrictSecretFile(PasswordPath);
   end;
 end;
