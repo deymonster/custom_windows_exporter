@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	 xmlns:fire="http://wixtoolset.org/schemas/v4/wxs/firewall">
+	<Package
+		Name="HW Monitor Agent"
+		Manufacturer="NITRINOnet"
+		Version="$(var.ProductVersion)"
+		UpgradeCode="0D9BB1E6-BC75-4C62-B4FE-1A0C8A5F966C"
+		Scope="perMachine"
+		InstallerVersion="500">
+		<MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+		<MediaTemplate EmbedCab="yes" />
+
+		<!-- GPO/Intune supplies this value. Hidden keeps it out of standard MSI logs. -->
+		<Property Id="NCM_HANDSHAKE_KEY" Hidden="yes" Secure="yes" />
+		<Launch
+			Condition="Installed OR NCM_HANDSHAKE_KEY"
+			Message="A panel handshake key is required. Set NCM_HANDSHAKE_KEY through an MST transform, Intune, or msiexec." />
+
+		<StandardDirectory Id="ProgramFiles6432Folder">
+			<Directory Id="INSTALLFOLDER" Name="HW Monitor Agent">
+				<Component Id="AgentServiceComponent" Bitness="always64" Guid="*">
+					<File Id="AgentExecutable" Source="$(var.AgentExe)" KeyPath="yes" />
+					<ServiceInstall
+						Id="InstallAgentService"
+						Name="NITRINOnetControlManager"
+						DisplayName="HW Monitor Agent"
+						Description="HW Monitor metrics collection agent"
+						Start="auto"
+						Type="ownProcess"
+						ErrorControl="normal" />
+					<ServiceControl
+						Id="ControlAgentService"
+						Name="NITRINOnetControlManager"
+						Start="install"
+						Stop="both"
+						Remove="uninstall"
+						Wait="yes" />
+					<fire:FirewallException
+						Id="MetricsFirewallRule"
+						Name="HW Monitor Agent metrics (TCP 9182)"
+						Description="Prometheus metrics protected by the panel handshake key"
+						Scope="localSubnet"
+						Port="9182"
+						Protocol="tcp"
+						Profile="all"
+						Program="[#AgentExecutable]"
+						Action="allow"
+						Enabled="yes" />
+				</Component>
+				<Component Id="ConfigurationScriptComponent" Bitness="always64" Guid="*">
+					<File Id="ConfigureAgentScript" Source="Configure-HWMonitorAgent.ps1" KeyPath="yes" />
+				</Component>
+			</Directory>
+		</StandardDirectory>
+
+		<Feature Id="MainFeature" Title="HW Monitor Agent" Level="1">
+			<ComponentRef Id="AgentServiceComponent" />
+			<ComponentRef Id="ConfigurationScriptComponent" />
+		</Feature>
+
+		<SetProperty
+			Id="ConfigureAgentSecrets"
+			Value="&quot;[%SystemFolder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[#ConfigureAgentScript]&quot; -HandshakeKey &quot;[NCM_HANDSHAKE_KEY]&quot;"
+			Before="ConfigureAgentSecrets"
+			Sequence="execute" />
+		<CustomAction
+			Id="ConfigureAgentSecrets"
+			BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+			DllEntry="WixSilentExec"
+			Execute="deferred"
+			Impersonate="no"
+			Return="check"
+			HideTarget="yes" />
+		<InstallExecuteSequence>
+			<Custom Action="ConfigureAgentSecrets" After="InstallFiles" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+		</InstallExecuteSequence>
+	</Package>
+</Wix>

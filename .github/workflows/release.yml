@@ -76,6 +76,26 @@ jobs:
             "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion="%APP_VER%" simple_install.iss
           )
 
+      - name: Setup WiX Toolset
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 4.*
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          wix extension add -g WixToolset.Util.wixext
+          wix extension add -g WixToolset.Firewall.wixext
+
+      - name: Build enterprise MSI
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          wix build -arch x64 `
+            -ext WixToolset.Util.wixext `
+            -ext WixToolset.Firewall.wixext `
+            -d ProductVersion="$env:FILE_VER" `
+            -d AgentExe="$PWD\NITRINOnetControlManager.exe" `
+            -o HWMonitorAgent.msi `
+            installer\msi\HWMonitorAgent.wxs
+
       - name: Debug List files in workspace
         run: |
           echo "Current working directory: %cd"
@@ -97,7 +117,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NITRINOnetControlManagerSetup
-          path: NITRINOnetControlManagerSetup.exe
+          path: |
+            NITRINOnetControlManagerSetup.exe
+            HWMonitorAgent.msi
 
   build-linux:
     runs-on: ubuntu-latest
@@ -165,22 +187,26 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           windows_file=NITRINOnetControlManagerSetup.exe
+          windows_msi_file=HWMonitorAgent.msi
           linux_file=hw-monitor-agent-linux-amd64.run
           windows_sha=$(sha256sum "$windows_file" | awk '{print $1}')
+          windows_msi_sha=$(sha256sum "$windows_msi_file" | awk '{print $1}')
           linux_sha=$(sha256sum "$linux_file" | awk '{print $1}')
           cat > manifest.json <<EOF
           {"agents":[
             {"id":"windows-amd64","platform":"windows","architecture":"amd64","version":"${VERSION}","file":"${windows_file}","sha256":"${windows_sha}","installer":"${windows_file}"},
+            {"id":"windows-amd64-msi","platform":"windows","architecture":"amd64","version":"${VERSION}","kind":"enterprise-msi","file":"${windows_msi_file}","sha256":"${windows_msi_sha}","installer":"msiexec /i ${windows_msi_file} /qn NCM_HANDSHAKE_KEY='<ключ панели>'"},
             {"id":"linux-amd64","platform":"linux","architecture":"amd64","version":"${VERSION}","file":"${linux_file}","sha256":"${linux_sha}","installer":"sudo env NCM_HANDSHAKE_KEY='<ключ панели>' ./${linux_file}"}
           ]}
           EOF
-          sha256sum "$windows_file" "$linux_file" manifest.json > SHA256SUMS
+          sha256sum "$windows_file" "$windows_msi_file" "$linux_file" manifest.json > SHA256SUMS
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             release/NITRINOnetControlManagerSetup.exe
+            release/HWMonitorAgent.msi
             release/hw-monitor-agent-linux-amd64.run
             release/manifest.json
             release/SHA256SUMS
