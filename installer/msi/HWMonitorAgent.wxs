@@ -51,10 +51,31 @@
 				</Component>
 			</Directory>
 		</StandardDirectory>
+		<StandardDirectory Id="ProgramMenuFolder">
+			<Directory Id="ApplicationProgramsFolder" Name="HW Monitor Agent">
+				<Component Id="StartMenuShortcutComponent" Guid="*">
+					<Shortcut
+						Id="UninstallAgentShortcut"
+						Name="Uninstall HW Monitor Agent"
+						Description="Remove HW Monitor Agent"
+						Target="[SystemFolder]msiexec.exe"
+						Arguments="/x [ProductCode]" />
+					<RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+					<RegistryValue
+						Root="HKLM"
+						Key="Software\NITRINOnet\HWMonitorAgent"
+						Name="StartMenuShortcut"
+						Type="integer"
+						Value="1"
+						KeyPath="yes" />
+				</Component>
+			</Directory>
+		</StandardDirectory>
 
 		<Feature Id="MainFeature" Title="HW Monitor Agent" Level="1">
 			<ComponentRef Id="AgentServiceComponent" />
 			<ComponentRef Id="ConfigurationScriptComponent" />
+			<ComponentRef Id="StartMenuShortcutComponent" />
 		</Feature>
 
 		<SetProperty
