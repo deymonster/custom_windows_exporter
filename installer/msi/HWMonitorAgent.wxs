@@ -44,9 +44,7 @@
 						Port="9182"
 						Protocol="tcp"
 						Profile="all"
-						Program="[#AgentExecutable]"
-						Action="allow"
-						Enabled="yes" />
+						Program="[#AgentExecutable]" />
 				</Component>
 				<Component Id="ConfigurationScriptComponent" Bitness="always64" Guid="*">
 					<File Id="ConfigureAgentScript" Source="Configure-HWMonitorAgent.ps1" KeyPath="yes" />
