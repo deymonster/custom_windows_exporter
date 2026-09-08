@@ -114,7 +114,7 @@ jobs:
         shell: cmd
 
       - name: Upload installer
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: NITRINOnetControlManagerSetup
           path: |
@@ -162,7 +162,7 @@ jobs:
             'HW Monitor Linux Agent (amd64)' ./setup.sh
 
       - name: Upload Linux installer
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: hw-monitor-agent-linux-amd64
           path: hw-monitor-agent-linux-amd64.run
@@ -176,7 +176,7 @@ jobs:
 
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           path: release
           merge-multiple: true
