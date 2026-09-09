@@ -234,6 +234,7 @@ jobs:
     env:
       RELEASE_HOST: ${{ secrets.RELEASE_HOST }}
       RELEASE_USER: ${{ secrets.RELEASE_USER }}
+      RELEASE_PORT: ${{ secrets.RELEASE_PORT }}
       RELEASE_SSH_KEY: ${{ secrets.RELEASE_SSH_KEY }}
       RELEASE_SSH_KNOWN_HOSTS: ${{ secrets.RELEASE_SSH_KNOWN_HOSTS }}
       RELEASE_TARGET_DIR: ${{ secrets.RELEASE_TARGET_DIR }}
@@ -242,17 +243,17 @@ jobs:
 
     steps:
       - name: Skip when release host is not configured
-        if: env.RELEASE_HOST == '' || env.RELEASE_USER == '' || env.RELEASE_SSH_KEY == '' || env.RELEASE_SSH_KNOWN_HOSTS == '' || env.RELEASE_TARGET_DIR == ''
+        if: env.RELEASE_HOST == '' || env.RELEASE_USER == '' || env.RELEASE_PORT == '' || env.RELEASE_SSH_KEY == '' || env.RELEASE_SSH_KNOWN_HOSTS == '' || env.RELEASE_TARGET_DIR == ''
         run: echo 'Release host secrets are not configured; skipping deployment.'
 
       - name: Download published release files
-        if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
+        if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_PORT != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
         run: |
           mkdir -p release-host-payload
           gh release download "$VERSION" --repo "$GITHUB_REPOSITORY" --dir release-host-payload
 
       - name: Configure SSH
-        if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
+        if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_PORT != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
         run: |
           install -d -m 700 ~/.ssh
           printf '%s\n' "$RELEASE_SSH_KEY" > ~/.ssh/id_ed25519
@@ -260,11 +261,11 @@ jobs:
           printf '%s\n' "$RELEASE_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
       - name: Upload release atomically
-        if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
+        if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_PORT != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
         run: |
           remote_base="${RELEASE_TARGET_DIR%/}/agents"
           remote_stage="${remote_base}/.staging-${VERSION}"
           remote_version="${remote_base}/${VERSION}"
-          ssh "$RELEASE_USER@$RELEASE_HOST" "mkdir -p '$remote_stage'"
-          scp release-host-payload/* "$RELEASE_USER@$RELEASE_HOST:$remote_stage/"
-          ssh "$RELEASE_USER@$RELEASE_HOST" "set -eu; test -f '$remote_stage/manifest.json'; test -f '$remote_stage/SHA256SUMS'; test -f '$remote_stage/hw-monitor-agents-${VERSION}.tar.gz'; test ! -e '$remote_version'; mv '$remote_stage' '$remote_version'; ln -sfn '$VERSION' '$remote_base/current'; ln -sfn 'current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_base/hw-monitor-agents-latest.tar.gz'; ln -sfn 'current/manifest.json' '$remote_base/manifest.json'; ln -sfn 'current/SHA256SUMS' '$remote_base/SHA256SUMS'"
+          ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "mkdir -p '$remote_stage'"
+          scp -P "$RELEASE_PORT" release-host-payload/* "$RELEASE_USER@$RELEASE_HOST:$remote_stage/"
+          ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "set -eu; test -f '$remote_stage/manifest.json'; test -f '$remote_stage/SHA256SUMS'; test -f '$remote_stage/hw-monitor-agents-${VERSION}.tar.gz'; test ! -e '$remote_version'; mv '$remote_stage' '$remote_version'; ln -sfn '$VERSION' '$remote_base/current'; ln -sfn 'current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_base/hw-monitor-agents-latest.tar.gz'; ln -sfn 'current/manifest.json' '$remote_base/manifest.json'; ln -sfn 'current/SHA256SUMS' '$remote_base/SHA256SUMS'"
