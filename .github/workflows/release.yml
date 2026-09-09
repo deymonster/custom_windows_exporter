@@ -173,6 +173,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      AGENT_RELEASE_SIGNING_KEY: ${{ secrets.AGENT_RELEASE_SIGNING_KEY }}
 
     steps:
       - name: Download release assets
@@ -199,7 +201,17 @@ jobs:
             {"id":"linux-amd64","platform":"linux","architecture":"amd64","version":"${VERSION}","file":"${linux_file}","sha256":"${linux_sha}","installer":"sudo env NCM_HANDSHAKE_KEY='<ключ панели>' ./${linux_file}"}
           ]}
           EOF
-          sha256sum "$windows_file" "$windows_msi_file" "$linux_file" manifest.json > SHA256SUMS
+          test -n "$AGENT_RELEASE_SIGNING_KEY"
+          umask 077
+          printf '%s' "$AGENT_RELEASE_SIGNING_KEY" > agent-release-signing.key
+          openssl pkeyutl -sign -rawin -inkey agent-release-signing.key \
+            -in manifest.json -out manifest.signature
+          payload=$(base64 -w 0 manifest.json)
+          signature=$(base64 -w 0 manifest.signature)
+          printf '{"schema_version":1,"payload":"%s","signature":"%s"}\n' \
+            "$payload" "$signature" > manifest.envelope.json
+          rm -f agent-release-signing.key manifest.signature
+          sha256sum "$windows_file" "$windows_msi_file" "$linux_file" manifest.json manifest.envelope.json > SHA256SUMS
 
       - name: Bundle agents for panel installation
         working-directory: release
@@ -211,6 +223,7 @@ jobs:
             HWMonitorAgent.msi \
             hw-monitor-agent-linux-amd64.run \
             manifest.json \
+            manifest.envelope.json \
             SHA256SUMS
           sha256sum "hw-monitor-agents-${VERSION}.tar.gz" >> SHA256SUMS
 
@@ -222,6 +235,7 @@ jobs:
             release/HWMonitorAgent.msi
             release/hw-monitor-agent-linux-amd64.run
             release/manifest.json
+            release/manifest.envelope.json
             release/SHA256SUMS
             release/hw-monitor-agents-*.tar.gz
 
@@ -278,4 +292,4 @@ jobs:
           remote_version="${remote_base}/${VERSION}"
           ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "mkdir -p '$remote_stage'"
           scp -P "$RELEASE_PORT" release-host-payload/* "$RELEASE_USER@$RELEASE_HOST:$remote_stage/"
-          ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "set -eu; test -f '$remote_stage/manifest.json'; test -f '$remote_stage/SHA256SUMS'; test -f '$remote_stage/hw-monitor-agents-${VERSION}.tar.gz'; test ! -e '$remote_version'; mv '$remote_stage' '$remote_version'; ln -sfn '$VERSION' '$remote_base/current'; ln -sfn 'current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_base/hw-monitor-agents-latest.tar.gz'; ln -sfn 'current/manifest.json' '$remote_base/manifest.json'; ln -sfn 'current/SHA256SUMS' '$remote_base/SHA256SUMS'; if [ '$RELEASE_CHANNEL' = stable ]; then ln -sfn 'stable/current' '$remote_root/current'; ln -sfn 'stable/current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_root/hw-monitor-agents-latest.tar.gz'; ln -sfn 'stable/manifest.json' '$remote_root/manifest.json'; ln -sfn 'stable/SHA256SUMS' '$remote_root/SHA256SUMS'; fi"
+          ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "set -eu; test -f '$remote_stage/manifest.json'; test -f '$remote_stage/manifest.envelope.json'; test -f '$remote_stage/SHA256SUMS'; test -f '$remote_stage/hw-monitor-agents-${VERSION}.tar.gz'; test ! -e '$remote_version'; mv '$remote_stage' '$remote_version'; ln -sfn '$VERSION' '$remote_base/current'; ln -sfn 'current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_base/hw-monitor-agents-latest.tar.gz'; ln -sfn 'current/manifest.json' '$remote_base/manifest.json'; ln -sfn 'current/manifest.envelope.json' '$remote_base/manifest.envelope.json'; ln -sfn 'current/SHA256SUMS' '$remote_base/SHA256SUMS'; if [ '$RELEASE_CHANNEL' = stable ]; then ln -sfn 'stable/current' '$remote_root/current'; ln -sfn 'stable/current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_root/hw-monitor-agents-latest.tar.gz'; ln -sfn 'stable/manifest.json' '$remote_root/manifest.json'; ln -sfn 'stable/current/manifest.envelope.json' '$remote_root/manifest.envelope.json'; ln -sfn 'stable/SHA256SUMS' '$remote_root/SHA256SUMS'; fi"
