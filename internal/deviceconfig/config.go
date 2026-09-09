@@ -15,6 +15,7 @@ type Config struct {
 	SerialNumber string `yaml:"serial_number"`
 	Location     string `yaml:"location"`
 	DeviceTag    string `yaml:"device_tag"`
+	Profile      string `yaml:"profile"`
 }
 
 func DefaultPath() string {
@@ -57,7 +58,7 @@ func createDefaultConfigFile(path string) error {
 		return fmt.Errorf("failed to create config directory: %v", err)
 	}
 
-	defaultConfigContent := "serial_number: \"unknown\"\nlocation: \"unknown\"\ndevice_tag: \"unknown\""
+	defaultConfigContent := "serial_number: \"unknown\"\nlocation: \"unknown\"\ndevice_tag: \"unknown\"\nprofile: \"auto\"\n"
 
 	if err := os.WriteFile(path, []byte(defaultConfigContent), 0o644); err != nil {
 		return fmt.Errorf("failed to write default config file: %v", err)

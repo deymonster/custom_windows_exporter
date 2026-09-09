@@ -168,6 +168,7 @@ echo "[6/8] Создание файла окружения"
 sudo tee "$ENV_FILE" >/dev/null <<EOF
 NCM_API_PASSWORD_FILE=$CONFIG_DIR/api.password
 NCM_HANDSHAKE_KEY_FILE=$CONFIG_DIR/handshake.key
+NCM_PROFILE=${NCM_PROFILE:-auto}
 NCM_CERT_DIR=$CERT_DIR
 NCM_LOG_FILE=$LOG_DIR/service.log
 NCM_STATE_DIR=$STATE_DIR

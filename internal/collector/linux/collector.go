@@ -17,6 +17,7 @@ import (
 type Collector struct {
 	mockEnabled      bool
 	deviceConfigPath string
+	profile          string
 }
 
 func New() *Collector {
@@ -88,6 +89,15 @@ func (c *Collector) RegisterMetrics(reg prometheus.Registerer) error {
 	reg.MustRegister(metrics.HardwareUUIDChanged)
 	reg.MustRegister(metrics.SerialNumberMetric)
 
+	deviceConfig, err := deviceconfig.Read(c.deviceConfigPath)
+	if err != nil {
+		return fmt.Errorf("read monitoring profile: %w", err)
+	}
+	c.profile = resolveProfile(deviceConfig.Profile)
+	if c.profile == "server" {
+		registerServerMetrics(reg)
+	}
+
 	return nil
 }
 
@@ -121,6 +131,11 @@ func (c *Collector) Start(ctx context.Context) error {
 	metrics.RecordGpuInfo()
 	metrics.RecordMotherboardInfo()
 	metrics.RecordSystemMetrics()
+
+	if c.profile == "server" {
+		metrics.ServerProfileInfo.With(prometheus.Labels{"profile": "server"}).Set(1)
+		go recordServerMetrics(ctx)
+	}
 
 	return nil
 }
