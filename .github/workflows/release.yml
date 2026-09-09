@@ -260,12 +260,22 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$RELEASE_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+      - name: Resolve distribution channel
+        if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_PORT != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
+        shell: bash
+        run: |
+          case "$VERSION" in
+            *-test.*|*-rc.*) echo 'RELEASE_CHANNEL=test' >> "$GITHUB_ENV" ;;
+            *) echo 'RELEASE_CHANNEL=stable' >> "$GITHUB_ENV" ;;
+          esac
+
       - name: Upload release atomically
         if: env.RELEASE_HOST != '' && env.RELEASE_USER != '' && env.RELEASE_PORT != '' && env.RELEASE_SSH_KEY != '' && env.RELEASE_SSH_KNOWN_HOSTS != '' && env.RELEASE_TARGET_DIR != ''
         run: |
-          remote_base="${RELEASE_TARGET_DIR%/}/agents"
+          remote_root="${RELEASE_TARGET_DIR%/}/agents"
+          remote_base="${remote_root}/${RELEASE_CHANNEL}"
           remote_stage="${remote_base}/.staging-${VERSION}"
           remote_version="${remote_base}/${VERSION}"
           ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "mkdir -p '$remote_stage'"
           scp -P "$RELEASE_PORT" release-host-payload/* "$RELEASE_USER@$RELEASE_HOST:$remote_stage/"
-          ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "set -eu; test -f '$remote_stage/manifest.json'; test -f '$remote_stage/SHA256SUMS'; test -f '$remote_stage/hw-monitor-agents-${VERSION}.tar.gz'; test ! -e '$remote_version'; mv '$remote_stage' '$remote_version'; ln -sfn '$VERSION' '$remote_base/current'; ln -sfn 'current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_base/hw-monitor-agents-latest.tar.gz'; ln -sfn 'current/manifest.json' '$remote_base/manifest.json'; ln -sfn 'current/SHA256SUMS' '$remote_base/SHA256SUMS'"
+          ssh -p "$RELEASE_PORT" "$RELEASE_USER@$RELEASE_HOST" "set -eu; test -f '$remote_stage/manifest.json'; test -f '$remote_stage/SHA256SUMS'; test -f '$remote_stage/hw-monitor-agents-${VERSION}.tar.gz'; test ! -e '$remote_version'; mv '$remote_stage' '$remote_version'; ln -sfn '$VERSION' '$remote_base/current'; ln -sfn 'current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_base/hw-monitor-agents-latest.tar.gz'; ln -sfn 'current/manifest.json' '$remote_base/manifest.json'; ln -sfn 'current/SHA256SUMS' '$remote_base/SHA256SUMS'; if [ '$RELEASE_CHANNEL' = stable ]; then ln -sfn 'stable/current' '$remote_root/current'; ln -sfn 'stable/current/hw-monitor-agents-${VERSION}.tar.gz' '$remote_root/hw-monitor-agents-latest.tar.gz'; ln -sfn 'stable/manifest.json' '$remote_root/manifest.json'; ln -sfn 'stable/SHA256SUMS' '$remote_root/SHA256SUMS'; fi"
