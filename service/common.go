@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
-	"runtime"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -154,10 +155,7 @@ func startHTTPServer(ctx context.Context, coll collector.Interface, logger *serv
 		metricsHandler.ServeHTTP(w, r)
 	})
 
-	apiHandler := api.NewRouter(secretsMgr)
-
 	metricsServer := &http.Server{Addr: ":9182", Handler: metricsMux}
-	apiServer := &http.Server{Addr: ":9183", Handler: apiHandler}
 
 	errCh := make(chan error, 2)
 
@@ -170,19 +168,35 @@ func startHTTPServer(ctx context.Context, coll collector.Interface, logger *serv
 		}
 	}()
 
-	go func() {
+	// The metrics endpoint is the product's required service. The legacy HTTPS
+	// API is optional and needs an externally provisioned certificate. A new MSI
+	// installation does not have one yet, so its absence must never take 9182
+	// down together with the optional API listener.
+	certDir := resolveCertDir()
+	certPath := filepath.Join(certDir, "cert.pem")
+	keyPath := filepath.Join(certDir, "key.pem")
+	var apiServer *http.Server
+	_, certErr := os.Stat(certPath)
+	_, keyErr := os.Stat(keyPath)
+	if certErr != nil || keyErr != nil {
 		if logger != nil {
-			logger.Printf("starting API server on :9183")
+			logger.Warnf(
+				"legacy API on :9183 is disabled: TLS certificate files are missing in %s",
+				certDir,
+			)
 		}
+	} else {
+		apiServer = &http.Server{Addr: ":9183", Handler: api.NewRouter(secretsMgr)}
+		go func() {
+			if logger != nil {
+				logger.Printf("starting API server on :9183")
+			}
 
-		certDir := resolveCertDir()
-		certPath := filepath.Join(certDir, "cert.pem")
-		keyPath := filepath.Join(certDir, "key.pem")
-
-		if err := apiServer.ListenAndServeTLS(certPath, keyPath); err != nil && err != http.ErrServerClosed {
-			errCh <- fmt.Errorf("api server: %w", err)
-		}
-	}()
+			if err := apiServer.ListenAndServeTLS(certPath, keyPath); err != nil && err != http.ErrServerClosed {
+				errCh <- fmt.Errorf("api server: %w", err)
+			}
+		}()
+	}
 
 	var serveErr error
 	select {
@@ -200,8 +214,10 @@ func startHTTPServer(ctx context.Context, coll collector.Interface, logger *serv
 	if err := metricsServer.Shutdown(shutdownCtx); err != nil && logger != nil {
 		logger.Errorf("metrics server shutdown error: %v", err)
 	}
-	if err := apiServer.Shutdown(shutdownCtx); err != nil && logger != nil {
-		logger.Errorf("api server shutdown error: %v", err)
+	if apiServer != nil {
+		if err := apiServer.Shutdown(shutdownCtx); err != nil && logger != nil {
+			logger.Errorf("api server shutdown error: %v", err)
+		}
 	}
 
 	if serveErr != nil {
