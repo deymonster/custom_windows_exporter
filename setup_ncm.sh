@@ -343,7 +343,7 @@ update() {
 
   manifest_url="${base_url%/}/${channel}/current/manifest.envelope.json"
   tmp_dir="$(mktemp -d)"
-  trap 'rm -rf "$tmp_dir"' EXIT
+  trap 'rm -rf "${tmp_dir:-}"' EXIT
   envelope="$tmp_dir/manifest.envelope.json"
   manifest="$tmp_dir/manifest.json"
   signature="$tmp_dir/manifest.signature"
