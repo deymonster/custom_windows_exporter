@@ -77,6 +77,42 @@ install_prereqs() {
   fi
 }
 
+configure_firewall() {
+  # Do not expose metrics to the whole network by default. The panel address
+  # (or a managed subnet) is supplied by the one-line install command.
+  local allowed="${NCM_ALLOWED_CIDRS:-}"
+  if [[ -z "$allowed" ]]; then
+    echo "[7/9] Firewall: not changed (set NCM_ALLOWED_CIDRS to allow the panel to reach port 9182)"
+    return
+  fi
+
+  local source
+  allowed="${allowed//,/ }"
+  for source in $allowed; do
+    if [[ ! "$source" =~ ^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$ ]]; then
+      echo "Invalid NCM_ALLOWED_CIDRS entry: $source" >&2
+      exit 1
+    fi
+
+    if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q '^Status: active'; then
+      sudo ufw allow from "$source" to any port 9182 proto tcp >/dev/null
+      echo "[7/9] Firewall: UFW allows $source -> 9182/tcp"
+      continue
+    fi
+
+    if command -v firewall-cmd >/dev/null 2>&1 && sudo firewall-cmd --state >/dev/null 2>&1; then
+      local family="ipv4"
+      [[ "$source" == *:* ]] && family="ipv6"
+      sudo firewall-cmd --permanent --add-rich-rule="rule family=\"$family\" source address=\"$source\" port port=\"9182\" protocol=\"tcp\" accept" >/dev/null
+      sudo firewall-cmd --reload >/dev/null
+      echo "[7/9] Firewall: firewalld allows $source -> 9182/tcp"
+      continue
+    fi
+
+    echo "[7/9] Firewall: no active UFW/firewalld detected; verify port 9182/tcp is reachable from $source"
+  done
+}
+
 write_systemd_unit() {
   if command -v systemctl >/dev/null 2>&1; then
     sudo tee /etc/systemd/system/nitrinonetcmanager.service >/dev/null <<'EOF'
@@ -133,14 +169,14 @@ stop_existing_agent
 sudo cp "$BIN" /usr/local/bin/nitrinonetcmanager
 sudo chmod +x /usr/local/bin/nitrinonetcmanager
 
-echo "[2/8] Создание каталогов"
+echo "[2/9] Создание каталогов"
 sudo mkdir -p "$CONFIG_DIR" "$CERT_DIR" "$LOG_DIR" "$STATE_DIR"
 
-echo "[3/8] Запись API-пароля"
+echo "[3/9] Запись API-пароля"
 echo "${API_PASSWORD}" | sudo tee "$CONFIG_DIR/api.password" >/dev/null
 sudo chmod 600 "$CONFIG_DIR/api.password"
 
-echo "[4/8] Генерация/задание handshake ключа"
+echo "[4/9] Генерация/задание handshake ключа"
 if [[ -n "$HANDSHAKE" ]]; then
   echo "$HANDSHAKE" | sudo tee "$CONFIG_DIR/handshake.key" >/dev/null
 else
@@ -152,7 +188,7 @@ else
 fi
 sudo chmod 600 "$CONFIG_DIR/handshake.key"
 
-echo "[5/8] Генерация самоподписанного сертификата (c SAN)"
+echo "[5/9] Генерация самоподписанного сертификата (c SAN)"
 HOST="$(hostname)"
 sudo openssl req -x509 -newkey rsa:2048 \
   -keyout "$CERT_DIR/key.pem" \
@@ -163,17 +199,20 @@ sudo openssl req -x509 -newkey rsa:2048 \
 sudo chmod 600 "$CERT_DIR/key.pem"
 sudo chmod 644 "$CERT_DIR/cert.pem"
 
-echo "[6/8] Создание файла окружения"
+echo "[6/9] Создание файла окружения"
 # после записи ENV-файла
 sudo tee "$ENV_FILE" >/dev/null <<EOF
 NCM_API_PASSWORD_FILE=$CONFIG_DIR/api.password
 NCM_HANDSHAKE_KEY_FILE=$CONFIG_DIR/handshake.key
 NCM_PROFILE=${NCM_PROFILE:-auto}
+NCM_ALLOWED_CIDRS=${NCM_ALLOWED_CIDRS:-}
 NCM_CERT_DIR=$CERT_DIR
 NCM_LOG_FILE=$LOG_DIR/service.log
 NCM_STATE_DIR=$STATE_DIR
 EOF
 sudo chmod 600 "$ENV_FILE"
+
+configure_firewall
 
 # Создаём systemd unit и включаем автозапуск, если systemd доступен
 write_systemd_unit
@@ -181,9 +220,9 @@ if command -v systemctl >/dev/null 2>&1; then
   sudo systemctl enable --now nitrinonetcmanager || true
 fi
 
-echo "[7/8] Запуск агента с корректным окружением и создание ncmctl"
+echo "[8/9] Запуск агента с корректным окружением и создание ncmctl"
 # блок [8/8] — запуск через nohup только если НЕТ systemd
-echo "[7/8] Запуск агента с корректным окружением и создание ncmctl"
+echo "[8/9] Запуск агента с корректным окружением и создание ncmctl"
 if ! command -v systemctl >/dev/null 2>&1; then
   sudo bash -c "set -a; source '$ENV_FILE'; set +a; nohup '/usr/local/bin/nitrinonetcmanager' > '$SERVICE_LOG' 2>&1 & echo \$! > '$PID_FILE'"
 fi
