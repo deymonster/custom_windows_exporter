@@ -139,18 +139,22 @@ jobs:
           GOOS=linux GOARCH=amd64 go test ./...
 
       - name: Build Linux agent
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
           mkdir -p dist/payload
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build -trimpath -ldflags='-s -w' \
             -o dist/payload/nitrinonetcmanager ./service
           cp setup_ncm.sh dist/payload/setup_ncm.sh
-          cat > dist/payload/setup.sh <<'EOF'
+          cp keys/agent-release-signing-public.pem dist/payload/agent-release-signing-public.pem
+          cat > dist/payload/setup.sh <<EOF
           #!/usr/bin/env bash
           set -euo pipefail
           # The secret is deliberately not stored in this release. Obtain the
           # panel handshake key from the administrator and pass it at install.
-          exec bash "$PWD/setup_ncm.sh" "$PWD/nitrinonetcmanager" "${NCM_HANDSHAKE_KEY:-}"
+          exec env NCM_AGENT_VERSION="\${NCM_AGENT_VERSION:-${VERSION:-dev}}" \
+            bash "\$PWD/setup_ncm.sh" "\$PWD/nitrinonetcmanager" "\${NCM_HANDSHAKE_KEY:-}"
           EOF
           chmod +x dist/payload/setup.sh dist/payload/setup_ncm.sh
 
