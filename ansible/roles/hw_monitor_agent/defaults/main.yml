@@ -1,0 +1,13 @@
+---
+# Secret. Store it in Ansible Vault or another secret manager; never commit it.
+ncm_handshake_key: ''
+
+# `stable` is intended for customer installations. `test` is only for the
+# internal testing channel.
+ncm_release_channel: stable
+ncm_release_base_url: https://downloads.deymonster.ru/agents
+
+ncm_profile: auto
+ncm_allowed_cidrs: ''
+ncm_install_dir: /var/tmp/hw-monitor-agent
+ncm_service_name: nitrinonetcmanager

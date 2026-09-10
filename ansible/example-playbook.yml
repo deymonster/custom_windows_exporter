@@ -1,0 +1,11 @@
+---
+- name: Install HW Monitor agents
+  hosts: monitored_linux
+  become: true
+  roles:
+    - role: hw_monitor_agent
+      vars:
+        ncm_handshake_key: '{{ vault_hw_monitor_handshake_key }}'
+        ncm_allowed_cidrs: '192.168.13.113/32'
+        ncm_profile: auto
+        ncm_release_channel: stable

@@ -1,0 +1,126 @@
+---
+- name: Validate HW Monitor agent role inputs
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == 'Linux'
+      - ansible_facts.architecture in ['x86_64', 'amd64']
+      - ncm_handshake_key | length > 0
+      - ncm_release_channel in ['stable', 'test']
+      - ncm_release_base_url is match('^https://[A-Za-z0-9._/-]+$')
+    fail_msg: >-
+      Linux amd64, an HTTPS release URL, a stable/test channel and a non-empty
+      ncm_handshake_key are required.
+
+- name: Create a private temporary directory for the agent installer
+  ansible.builtin.file:
+    path: '{{ ncm_install_dir }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  become: true
+
+- name: Fetch signed agent release envelope
+  ansible.builtin.uri:
+    url: '{{ ncm_release_base_url }}/{{ ncm_release_channel }}/current/manifest.envelope.json'
+    method: GET
+    return_content: true
+    status_code: 200
+    validate_certs: true
+  register: ncm_release_envelope
+
+- name: Decode signed release envelope
+  ansible.builtin.set_fact:
+    ncm_release_envelope_json: '{{ ncm_release_envelope.content | from_json }}'
+  no_log: true
+
+- name: Write signed manifest payload and signature
+  ansible.builtin.shell: >-
+    set -euo pipefail;
+    printf '%s' '{{ ncm_release_envelope_json.payload }}' | base64 --decode > {{ ncm_install_dir }}/manifest.json;
+    printf '%s' '{{ ncm_release_envelope_json.signature }}' | base64 --decode > {{ ncm_install_dir }}/manifest.signature
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: true
+  no_log: true
+
+- name: Install the public release-signing key
+  ansible.builtin.copy:
+    src: agent-release-signing-public.pem
+    dest: /etc/nitrinonetcmanager/agent-release-signing-public.pem
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Verify release manifest signature
+  ansible.builtin.command:
+    cmd: >-
+      openssl pkeyutl -verify -rawin -pubin
+      -inkey /etc/nitrinonetcmanager/agent-release-signing-public.pem
+      -in {{ ncm_install_dir }}/manifest.json
+      -sigfile {{ ncm_install_dir }}/manifest.signature
+  changed_when: false
+  become: true
+
+- name: Read verified Linux release metadata
+  ansible.builtin.set_fact:
+    ncm_linux_release: >-
+      {{ ((ncm_release_envelope_json.payload | b64decode | from_json).agents
+      | selectattr('id', 'equalto', 'linux-amd64') | list | first) }}
+
+- name: Validate verified Linux release metadata
+  ansible.builtin.assert:
+    that:
+      - ncm_linux_release.version is match('^v[0-9A-Za-z._-]+$')
+      - ncm_linux_release.file is match('^[A-Za-z0-9._-]+\.run$')
+      - ncm_linux_release.sha256 is match('^[a-f0-9]{64}$')
+
+- name: Read installed agent configuration when present
+  ansible.builtin.slurp:
+    src: /etc/nitrinonetcmanager/ncm.env
+  register: ncm_installed_env
+  failed_when: false
+  changed_when: false
+  become: true
+
+- name: Determine installed agent version
+  ansible.builtin.set_fact:
+    ncm_installed_version: >-
+      {{ (ncm_installed_env.content | default('') | b64decode
+      | regex_findall('(?m)^NCM_AGENT_VERSION=(.+)$') | first | default('unknown')) }}
+
+- name: Download verified Linux installer
+  ansible.builtin.get_url:
+    url: '{{ ncm_release_base_url }}/{{ ncm_release_channel }}/current/{{ ncm_linux_release.file }}'
+    dest: '{{ ncm_install_dir }}/{{ ncm_linux_release.file }}'
+    checksum: 'sha256:{{ ncm_linux_release.sha256 }}'
+    owner: root
+    group: root
+    mode: '0700'
+    force: true
+    validate_certs: true
+  become: true
+  when: ncm_installed_version != ncm_linux_release.version
+
+- name: Install or update HW Monitor Linux agent
+  ansible.builtin.command:
+    cmd: '{{ ncm_install_dir }}/{{ ncm_linux_release.file }}'
+  environment:
+    NCM_HANDSHAKE_KEY: '{{ ncm_handshake_key }}'
+    NCM_PROFILE: '{{ ncm_profile }}'
+    NCM_ALLOWED_CIDRS: '{{ ncm_allowed_cidrs }}'
+    NCM_UPDATE_CHANNEL: '{{ ncm_release_channel }}'
+    NCM_UPDATE_BASE_URL: '{{ ncm_release_base_url }}'
+    NCM_AGENT_VERSION: '{{ ncm_linux_release.version }}'
+  become: true
+  no_log: true
+  when: ncm_installed_version != ncm_linux_release.version
+
+- name: Verify HW Monitor agent service
+  ansible.builtin.systemd:
+    name: '{{ ncm_service_name }}'
+    enabled: true
+    state: started
+  become: true
